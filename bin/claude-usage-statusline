@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Claude Code statusLine wrapper for the "Claude Usage" GNOME Shell extension.
+#
+# Claude Code pipes a JSON status payload to the configured statusLine command
+# on every render. That payload is the only local source of subscription rate
+# limit percentages, so this script stores it verbatim for the extension to
+# read, then hands the same stdin to whatever status line was configured before.
+#
+# Nothing is parsed here on purpose: the extension already speaks JSON, the
+# write stays atomic and the script keeps zero dependencies.
+#
+# Environment:
+#   CLAUDE_USAGE_DIR    Config dir this profile stands for. install.sh and the
+#                       preferences dialog bake it into the command string, so
+#                       the profile is identified even when the variable is not
+#                       exported into the session.
+#   CLAUDE_USAGE_CHAIN  Previous statusLine command; receives the same stdin.
+#   CLAUDE_CONFIG_DIR   Fallback when CLAUDE_USAGE_DIR is unset.
+#   XDG_STATE_HOME      State root, defaults to ~/.local/state.
+#
+set -eu
+
+config_dir="${CLAUDE_USAGE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/claude-usage"
+
+# Profile identity is the config dir path slugified into a file name:
+#   /home/me/.claude       -> -home-me-.claude
+#   /home/me/.claude-work  -> -home-me-.claude--work
+#   /home/me/.claude/work  -> -home-me-.claude-work
+# Existing dashes are doubled before slashes become dashes, otherwise the last
+# two paths would collide and share one state file.
+slug=$(printf '%s' "$config_dir" | sed 's/-/--/g; s|/|-|g')
+
+payload=$(cat)
+
+# An empty payload would only overwrite good data with nothing.
+if [ -n "$payload" ]; then
+	mkdir -p "$state_dir"
+	# The payload carries the working directory and spend of the session.
+	chmod 700 "$state_dir" 2>/dev/null || true
+
+	printf '%s' "$payload" > "$state_dir/$slug.json.tmp"
+	mv -f "$state_dir/$slug.json.tmp" "$state_dir/$slug.json"
+fi
+
+# Hand over to the status line that was configured before the wrapper. Failures
+# propagate so a broken chain surfaces in Claude Code instead of being hidden.
+if [ -n "${CLAUDE_USAGE_CHAIN:-}" ]; then
+	printf '%s' "$payload" | sh -c "$CLAUDE_USAGE_CHAIN"
+fi

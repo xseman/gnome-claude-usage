@@ -1,0 +1,63 @@
+name: Quality checks
+
+on:
+    pull_request:
+        branches:
+            - master
+    push:
+        branches:
+            - master
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    shell:
+        name: Shell
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: shellcheck
+              run: shellcheck bin/claude-usage-statusline build.sh install.sh test/run.sh
+
+            - name: parse
+              run: |
+                  sh -n bin/claude-usage-statusline
+                  sh -n test/run.sh
+                  bash -n build.sh
+                  bash -n install.sh
+
+    typescript:
+        name: TypeScript
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: install
+              run: bun install --frozen-lockfile
+
+            - name: typecheck
+              run: bun run typecheck
+
+            - name: install gjs
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install --no-install-recommends -y gjs libglib2.0-bin
+
+            - name: schema
+              run: glib-compile-schemas --strict --dry-run src/schemas
+
+            - name: test
+              run: bun run test
+
+    fmt:
+        name: Format
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+            - uses: dprint/check@v2.3

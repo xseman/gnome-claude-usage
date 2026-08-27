@@ -1,0 +1,104 @@
+/* Panel button */
+
+.claude-usage-panel-label {
+	margin-left: 4px;
+}
+
+.claude-usage-panel-label.claude-usage-warning {
+	color: #f5c211;
+}
+
+.claude-usage-panel-label.claude-usage-critical {
+	color: #ff7b63;
+}
+
+.claude-usage-panel-label.claude-usage-stale,
+.claude-usage-panel-label.claude-usage-unknown {
+	color: rgba(255, 255, 255, 0.5);
+}
+
+/* Profile header */
+
+.claude-usage-header {
+	padding-top: 8px;
+	padding-bottom: 2px;
+}
+
+.claude-usage-name {
+	font-weight: bold;
+}
+
+.claude-usage-age {
+	font-size: 0.85em;
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.claude-usage-age.claude-usage-stale {
+	color: #f5c211;
+}
+
+/* Limit rows */
+
+.claude-usage-row {
+	padding-top: 2px;
+	padding-bottom: 2px;
+	spacing: 10px;
+}
+
+.claude-usage-row-title {
+	min-width: 60px;
+}
+
+.claude-usage-row-percent {
+	min-width: 44px;
+	text-align: right;
+}
+
+.claude-usage-row-percent.claude-usage-warning {
+	color: #f5c211;
+}
+
+.claude-usage-row-percent.claude-usage-critical {
+	color: #ff7b63;
+}
+
+.claude-usage-row-countdown {
+	min-width: 80px;
+	text-align: right;
+	color: rgba(255, 255, 255, 0.6);
+}
+
+/* Usage bar */
+
+.claude-usage-bar {
+	width: 150px;
+	height: 6px;
+	border-radius: 3px;
+	background-color: rgba(255, 255, 255, 0.15);
+}
+
+.claude-usage-bar-fill {
+	height: 6px;
+	border-radius: 3px;
+	background-color: #78aeed;
+}
+
+.claude-usage-bar-fill.claude-usage-warning {
+	background-color: #f5c211;
+}
+
+.claude-usage-bar-fill.claude-usage-critical {
+	background-color: #ff7b63;
+}
+
+/* Session footer */
+
+.claude-usage-footer {
+	padding-top: 0;
+	padding-bottom: 8px;
+}
+
+.claude-usage-footer-label {
+	font-size: 0.85em;
+	color: rgba(255, 255, 255, 0.6);
+}

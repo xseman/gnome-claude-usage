@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+	<enum id="org.gnome.shell.extensions.claude-usage.panel-source">
+		<value nick="highest" value="0"/>
+		<value nick="active" value="1"/>
+		<value nick="profile" value="2"/>
+		<value nick="all" value="3"/>
+	</enum>
+
+	<enum id="org.gnome.shell.extensions.claude-usage.panel-limit">
+		<value nick="five-hour" value="0"/>
+		<value nick="seven-day" value="1"/>
+		<value nick="highest" value="2"/>
+	</enum>
+
+	<enum id="org.gnome.shell.extensions.claude-usage.panel-format">
+		<value nick="icon" value="0"/>
+		<value nick="text" value="1"/>
+		<value nick="both" value="2"/>
+	</enum>
+
+	<schema id="org.gnome.shell.extensions.claude-usage"
+		path="/org/gnome/shell/extensions/claude-usage/">
+
+		<key name="profiles" type="as">
+			<default>[]</default>
+			<summary>Configured profiles</summary>
+			<description>
+				One JSON object per entry with the keys name, dir, enabled and
+				chain. The dir is a Claude Code config directory, the value
+				CLAUDE_CONFIG_DIR would be set to, and identifies the profile.
+			</description>
+		</key>
+
+		<key name="panel-source" enum="org.gnome.shell.extensions.claude-usage.panel-source">
+			<default>"highest"</default>
+			<summary>Which profile the panel shows</summary>
+			<description>
+				highest shows the profile closest to its limit, active shows the
+				most recently updated one, profile pins panel-profile and all
+				shows every enabled profile side by side.
+			</description>
+		</key>
+
+		<key name="panel-profile" type="s">
+			<default>""</default>
+			<summary>Pinned profile</summary>
+			<description>Config directory pinned when panel-source is profile.</description>
+		</key>
+
+		<key name="panel-limit" enum="org.gnome.shell.extensions.claude-usage.panel-limit">
+			<default>"five-hour"</default>
+			<summary>Which limit the panel shows</summary>
+			<description>The rate limit window rendered in the panel button.</description>
+		</key>
+
+		<key name="panel-format" enum="org.gnome.shell.extensions.claude-usage.panel-format">
+			<default>"both"</default>
+			<summary>Panel button contents</summary>
+			<description>Whether the panel shows the gauge icon, the percentage or both.</description>
+		</key>
+
+		<key name="hide-when-stale" type="b">
+			<default>false</default>
+			<summary>Hide the panel button without fresh data</summary>
+			<description>
+				Hide the indicator when no profile has reported within
+				stale-after-minutes instead of dimming it.
+			</description>
+		</key>
+
+		<key name="warning-threshold" type="i">
+			<range min="1" max="100"/>
+			<default>70</default>
+			<summary>Warning threshold</summary>
+			<description>Percentage at which usage is rendered as a warning.</description>
+		</key>
+
+		<key name="critical-threshold" type="i">
+			<range min="1" max="100"/>
+			<default>90</default>
+			<summary>Critical threshold</summary>
+			<description>Percentage at which usage is rendered as critical.</description>
+		</key>
+
+		<key name="notify-threshold" type="b">
+			<default>true</default>
+			<summary>Notify on threshold crossing</summary>
+			<description>Send a notification when a profile crosses a threshold upwards.</description>
+		</key>
+
+		<key name="stale-after-minutes" type="i">
+			<range min="1" max="1440"/>
+			<default>60</default>
+			<summary>Age at which data counts as stale</summary>
+			<description>
+				Payloads only arrive while a Claude Code session renders its
+				status line, so data older than this is marked stale.
+			</description>
+		</key>
+
+		<key name="refresh-seconds" type="i">
+			<range min="5" max="600"/>
+			<default>30</default>
+			<summary>Relative time refresh interval</summary>
+			<description>
+				How often the rendered countdowns are recomputed. Usage values
+				themselves arrive through a file monitor, not by polling.
+			</description>
+		</key>
+
+		<key name="state-dir" type="s">
+			<default>""</default>
+			<summary>State directory override</summary>
+			<description>
+				Directory the status line wrapper writes to. Empty means
+				$XDG_STATE_HOME/claude-usage.
+			</description>
+		</key>
+	</schema>
+</schemalist>

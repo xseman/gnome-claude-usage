@@ -1,0 +1,15 @@
+{
+	"uuid": "claude-usage@xseman.github.io",
+	"name": "Claude Usage",
+	"description": "Claude Code rate limit usage in the top panel, with one entry per CLAUDE_CONFIG_DIR profile.",
+	"shell-version": [
+		"48",
+		"49",
+		"50"
+	],
+	"url": "https://github.com/xseman/gnome-claude-usage",
+	"settings-schema": "org.gnome.shell.extensions.claude-usage",
+	"session-modes": [
+		"user"
+	]
+}

@@ -1,0 +1,17 @@
+{
+	"name": "gnome-claude-usage",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "./build.sh",
+		"typecheck": "tsc --noEmit",
+		"test": "./test/run.sh",
+		"fmt": "dprint fmt",
+		"fmt:check": "dprint check"
+	},
+	"devDependencies": {
+		"@girs/gnome-shell": "50.0.4",
+		"typescript": "7.0.2"
+	}
+}
