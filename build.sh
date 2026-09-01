@@ -12,7 +12,7 @@ rm -rf lib
 ./node_modules/.bin/tsc
 
 cp src/metadata.json src/stylesheet.css lib/
-cp -r src/schemas lib/
+cp -r src/schemas src/icons lib/
 glib-compile-schemas lib/schemas
 
 # The wrapper travels with the extension so the preferences dialog can point

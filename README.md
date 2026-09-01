@@ -84,14 +84,14 @@ rotation can log you out, so the extension stays away from it.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Activities             27 Aug  12:04              ◕ 43%    ⏻   │
+│  Activities             27 Aug  12:04              ✳ 43%    ⏻   │
 └─────────────────────────────────────────────────────────────────┘
 
-  ◔ 43%        normal
-  ◕ 91%        above the critical threshold
-  ◐ 43% · 9%   two profiles, "All profiles side by side"
-  ◌ 43%        stale, dimmed
-  ◌ --         no data, hook not installed
+  ✳ 43%        normal
+  ✳ 91%        above the critical threshold, red
+  ✳ 43% · 9%   two profiles, "All profiles side by side"
+  ✳ 43%        stale, dimmed
+  ✳ --         no profile has reported yet
 ```
 
 **Popup**

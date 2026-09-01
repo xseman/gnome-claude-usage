@@ -1,5 +1,5 @@
 import Clutter from "gi://Clutter";
-import type Gio from "gi://Gio";
+import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import GObject from "gi://GObject";
 import St from "gi://St";
@@ -85,8 +85,13 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 		this.settings = extension.getSettings();
 		this.store = new Store(stateDir());
 
+		// Shipped rather than themed: St recolours a "-symbolic.svg" loaded
+		// this way to the label colour, so it follows the panel like a stock
+		// icon does.
 		this.icon = new St.Icon({
-			icon_name: "utilities-system-monitor-symbolic",
+			gicon: Gio.icon_new_for_string(
+				GLib.build_filenamev([extension.path, "icons", "claude-usage-symbolic.svg"]),
+			),
 			style_class: "system-status-icon",
 		});
 
