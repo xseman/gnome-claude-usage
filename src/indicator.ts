@@ -348,7 +348,7 @@ GObject.registerClass(ClaudeUsageIndicator);
 
 export const Indicator = ClaudeUsageIndicator;
 
-/** Header, one row per limit window and a footer, for a single profile. */
+/** Header and one row per limit window, for a single profile. */
 function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	const items: PopupMenu.PopupBaseMenuItem[] = [];
 
@@ -369,8 +369,11 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	);
 	items.push(header);
 
-	for (const limit of view.rows) {
-		const item = row("claude-usage-row");
+	view.rows.forEach((limit, index) => {
+		// Menu items are flat siblings, so the last row of a section cannot be
+		// found with :last-child. It carries the section's bottom padding.
+		const last = index === view.rows.length - 1;
+		const item = row(last ? "claude-usage-row claude-usage-row-last" : "claude-usage-row");
 		item.add_child(
 			new St.Label({
 				text: limit.title,
@@ -391,7 +394,7 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 			}),
 		);
 		items.push(item);
-	}
+	});
 
 	if (view.payload === null) {
 		items.push(
@@ -412,15 +415,6 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 			new PopupMenu.PopupMenuItem("No rate limits reported yet", { reactive: false }),
 		);
 	}
-
-	const footer = row("claude-usage-footer");
-	footer.add_child(
-		new St.Label({
-			text: footerText(view.payload),
-			style_class: "claude-usage-footer-label",
-		}),
-	);
-	items.push(footer);
 
 	return items;
 }
@@ -457,27 +451,6 @@ function usageBar(percent: number, level: Severity): St.Widget {
 	);
 
 	return track;
-}
-
-function footerText(payload: StatusPayload): string {
-	const parts: string[] = [];
-
-	const context = payload.context_window?.used_percentage;
-	if (Number.isFinite(context)) {
-		parts.push(`context ${Math.round(context as number)}%`);
-	}
-
-	const cost = payload.cost?.total_cost_usd;
-	if (Number.isFinite(cost) && (cost as number) > 0) {
-		parts.push(`$${(cost as number).toFixed(2)}`);
-	}
-
-	const dir = payload.workspace?.current_dir;
-	if (typeof dir === "string" && dir !== "") {
-		parts.push(dir.split("/").filter(Boolean).at(-1) ?? dir);
-	}
-
-	return parts.join(" · ");
 }
 
 function peakOf(view: ProfileView): number {

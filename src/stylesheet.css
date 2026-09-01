@@ -45,6 +45,10 @@
 	spacing: 10px;
 }
 
+.claude-usage-row-last {
+	padding-bottom: 8px;
+}
+
 .claude-usage-row-title {
 	min-width: 60px;
 }
@@ -89,16 +93,4 @@
 
 .claude-usage-bar-fill.claude-usage-critical {
 	background-color: #ff7b63;
-}
-
-/* Session footer */
-
-.claude-usage-footer {
-	padding-top: 0;
-	padding-bottom: 8px;
-}
-
-.claude-usage-footer-label {
-	font-size: 0.85em;
-	color: rgba(255, 255, 255, 0.6);
 }

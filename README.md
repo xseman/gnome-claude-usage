@@ -103,8 +103,6 @@ rotation can log you out, so the extension stays away from it.
 │    5 h        ████████░░░░░░░░░░░░░   43 %    2 h 11 m     │
 │    7 d        ██████████████░░░░░░░   68 %    4 d 03 h     │
 │    7 d Opus   ████░░░░░░░░░░░░░░░░░   22 %    4 d 03 h     │
-│                                                            │
-│    context 61 %  ·  $4.12  ·  demo-web                     │
 ├────────────────────────────────────────────────────────────┤
 │  personal · Sonnet 5                            3 h ago    │
 │                                                            │
@@ -266,8 +264,6 @@ slugs skip that step and would map both to the same name.
 
 - **Rate limits are account wide**, so concurrent sessions in one profile report
   the same numbers and the most recent write wins.
-- **The cost figure is per session**, not a daily total, which is why it sits in
-  the footer rather than next to the limits.
 - **`session-modes` is `user` only**, so the indicator is hidden on the lock
   screen.
 - **The extension polls instead of using `Gio.FileMonitor`.** File monitors need

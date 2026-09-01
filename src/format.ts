@@ -8,9 +8,6 @@
 /** Everything the status line payload carries that this extension reads. */
 export interface StatusPayload {
 	model?: { display_name?: string; };
-	workspace?: { current_dir?: string; };
-	cost?: { total_cost_usd?: number; };
-	context_window?: { used_percentage?: number; };
 	/** Values are RateLimit objects, but Claude Code also puts flags in here. */
 	rate_limits?: Record<string, unknown>;
 }
