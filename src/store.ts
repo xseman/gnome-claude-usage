@@ -26,11 +26,14 @@ interface CachedEntry {
  * are a few hundred bytes each, so a refresh stats a handful of files and only
  * parses the ones whose modification time or size moved.
  *
- * Refreshing is pull based rather than driven by a Gio.FileMonitor. Directory
- * monitors are not available everywhere: on Fedora 44 with glib2 2.88,
+ * Refreshing is pull based rather than driven by a Gio.FileMonitor, which needs
+ * an inotify instance. Those are a per-user kernel resource capped by
+ * fs.inotify.max_user_instances, 128 by default, and a desktop full of editors
+ * and language servers runs out of them routinely. Once it does,
  * `monitor_directory` fails with "Unable to find default local file monitor
- * type" for every GIO client, and `monitor_file` degrades to GPollFileMonitor,
- * which polls anyway. The indicator already runs a timer for its countdowns.
+ * type" for every GIO client and `monitor_file` degrades to polling anyway.
+ * Stating a handful of small files on the timer the countdowns already need
+ * cannot fail that way, and is one code path fewer.
  *
  * Entries are keyed by the slug of their config directory rather than by the
  * directory itself: slugging cannot be reversed, and only the forward direction

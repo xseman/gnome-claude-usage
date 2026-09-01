@@ -270,11 +270,13 @@ slugs skip that step and would map both to the same name.
   the footer rather than next to the limits.
 - **`session-modes` is `user` only**, so the indicator is hidden on the lock
   screen.
-- **The extension polls instead of using `Gio.FileMonitor`.** On Fedora 44 with
-  glib2 2.88, `monitor_directory` fails with _"Unable to find default local file
-  monitor type"_ for every GIO client, and `monitor_file` degrades to
-  `GPollFileMonitor` anyway. Reading a few small files on the timer the
-  countdowns already need is one code path fewer.
+- **The extension polls instead of using `Gio.FileMonitor`.** File monitors need
+  an inotify instance, and those are capped per user by
+  `fs.inotify.max_user_instances` (128 by default). A desktop full of editors and
+  language servers exhausts that routinely, and once it does `monitor_directory`
+  fails with _"Unable to find default local file monitor type"_ for every GIO
+  client while `monitor_file` degrades to polling anyway. Stating a handful of
+  small files on the timer the countdowns already need cannot fail that way.
 
 ## Development
 
@@ -284,6 +286,46 @@ bun run build       # src/*.ts -> lib/
 bun run test        # builds, then runs the suites under gjs
 bun run fmt
 shellcheck bin/claude-usage-statusline build.sh install.sh test/run.sh
+```
+
+### Reloading an installed copy
+
+`bun run build && ./install.sh` replaces the files, but what it takes to pick
+them up differs per file:
+
+| Changed                       | To apply                                     |
+| ----------------------------- | -------------------------------------------- |
+| `prefs.js`                    | Close the preferences window and reopen it   |
+| `bin/claude-usage-statusline` | Nothing, Claude Code runs it on every render |
+| Anything else                 | Log out and back in                          |
+
+GNOME Shell imports `extension.js` once per session and caches the module, so
+`gnome-extensions disable`/`enable` re-runs `enable()` against the old code. With
+a changed `metadata.json` version it refuses outright: _"A different version was
+loaded previously. You need to log out for changes to take effect."_ On Xorg,
+Alt+F2 `r` restarts the shell in place; Wayland has no equivalent.
+
+The preferences dialog runs in the separate `org.gnome.Shell.Extensions` D-Bus
+service, which quits when idle, so reopening the window usually reloads it. To
+be certain:
+
+```sh
+pkill -f "gjs -m /usr/share/gnome-shell/org.gnome.Shell.Extensions"
+```
+
+To try a build without logging out, run a nested shell. It picks up the
+installed extension and leaves the session alone:
+
+```sh
+dbus-run-session -- gnome-shell --wayland
+```
+
+Headless, for a load check in a script:
+
+```sh
+G_MESSAGES_DEBUG=all dbus-run-session -- \
+    gnome-shell --headless --virtual-monitor 1280x720 2>&1 |
+    grep claude-usage
 ```
 
 `src/` holds the TypeScript sources, `lib/` the built extension, `test/` suites
