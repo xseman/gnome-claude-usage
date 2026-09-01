@@ -85,12 +85,12 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 		this.settings = extension.getSettings();
 		this.store = new Store(stateDir());
 
-		// Loaded straight off disk rather than through the icon theme. St
-		// recolours it to the panel foreground because the file name ends in
-		// "-symbolic.svg".
+		// Deliberately not named "-symbolic.svg": St would then recolour it to
+		// the panel foreground and the mark would lose the colour that makes it
+		// readable against both a dark and a light bar.
 		this.icon = new St.Icon({
 			gicon: Gio.icon_new_for_string(
-				GLib.build_filenamev([extension.path, "icons", "claude-usage-symbolic.svg"]),
+				GLib.build_filenamev([extension.path, "icons", "claude-usage.svg"]),
 			),
 			style_class: "system-status-icon",
 		});
