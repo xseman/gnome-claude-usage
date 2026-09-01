@@ -47,7 +47,10 @@ jobs:
             - name: install gjs
               run: |
                   sudo apt-get update
-                  sudo apt-get install --no-install-recommends -y gjs libglib2.0-bin
+                  # gir1.2-soup-3.0 is the Soup typelib the live fetch client
+                  # imports; the tests load that module even though they never
+                  # touch the network.
+                  sudo apt-get install --no-install-recommends -y gjs libglib2.0-bin gir1.2-soup-3.0
 
             - name: schema
               run: glib-compile-schemas --strict --dry-run src/schemas
