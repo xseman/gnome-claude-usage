@@ -40,319 +40,321 @@ const PANEL_LIMITS: Choice[] = [
 	["highest", "Whichever is highest"],
 ];
 
-export default class ClaudeUsagePreferences extends ExtensionPreferences {
-	private settings!: Gio.Settings;
-	private wrapper!: string;
-	private group!: Adw.PreferencesGroup;
-	private rows: Adw.PreferencesRow[] = [];
+/** State of one open preferences window. */
+interface Context {
+	settings: Gio.Settings;
+	wrapper: string;
+	group: Adw.PreferencesGroup | null;
+	rows: Adw.PreferencesRow[];
+}
 
+export default class ClaudeUsagePreferences extends ExtensionPreferences {
 	// GNOME Shell awaits this hook, so the base type declares it async. The body
 	// has nothing to wait for and still runs to completion synchronously.
 	override async fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
-		this.settings = this.getSettings();
-		this.wrapper = GLib.build_filenamev([this.path, "bin", "claude-usage-statusline"]);
+		// Everything scoped to this window lives on a context the builders
+		// share, never on the extension object, so closing the window drops it.
+		const ctx: Context = {
+			settings: this.getSettings(),
+			wrapper: GLib.build_filenamev([this.path, "bin", "claude-usage-statusline.js"]),
+			group: null,
+			rows: [],
+		};
 
-		window.add(this.profilesPage(window));
-		window.add(this.panelPage());
+		window.add(profilesPage(ctx, window));
+		window.add(panelPage(ctx));
+	}
+}
+/* Profiles */
+
+function profilesPage(ctx: Context, window: Adw.PreferencesWindow): Adw.PreferencesPage {
+	const page = new Adw.PreferencesPage({
+		title: "Profiles",
+		icon_name: "system-users-symbolic",
+	});
+
+	ctx.group = new Adw.PreferencesGroup({
+		title: "Profiles",
+		description: "One entry per Claude Code config directory, the value "
+			+ `CLAUDE_CONFIG_DIR would be set to. Only ${stateDir()} is read, `
+			+ "never your credentials, and never the network.",
+	});
+
+	const add = new Gtk.Button({
+		icon_name: "list-add-symbolic",
+		tooltip_text: "Add a profile",
+		valign: Gtk.Align.CENTER,
+		css_classes: ["flat"],
+	});
+	add.connect("clicked", () => {
+		chooseDirectory(ctx, window);
+	});
+
+	ctx.group.set_header_suffix(add);
+	page.add(ctx.group);
+
+	rebuildProfiles(ctx, window);
+
+	return page;
+}
+
+function rebuildProfiles(ctx: Context, window: Adw.PreferencesWindow): void {
+	for (const row of ctx.rows) {
+		ctx.group?.remove(row);
 	}
 
-	/* Profiles */
+	ctx.rows = readProfiles(ctx.settings).map((profile, index) => {
+		return profileRow(ctx, window, profile.dir, index);
+	});
 
-	private profilesPage(window: Adw.PreferencesWindow): Adw.PreferencesPage {
-		const page = new Adw.PreferencesPage({
-			title: "Profiles",
-			icon_name: "system-users-symbolic",
-		});
+	if (ctx.rows.length === 0) {
+		ctx.rows.push(
+			new Adw.ActionRow({
+				title: "No profiles yet",
+				subtitle: "Add the config directory a Claude Code profile uses.",
+			}),
+		);
+	}
 
-		this.group = new Adw.PreferencesGroup({
-			title: "Profiles",
-			description: "One entry per Claude Code config directory, the value "
-				+ `CLAUDE_CONFIG_DIR would be set to. Only ${stateDir()} is read, `
-				+ "never your credentials, and never the network.",
-		});
+	for (const row of ctx.rows) {
+		ctx.group?.add(row);
+	}
+}
 
-		const add = new Gtk.Button({
-			icon_name: "list-add-symbolic",
-			tooltip_text: "Add a profile",
+/** One row per profile: what it is, whether the hook is in, and the controls. */
+function profileRow(
+	ctx: Context,
+	window: Adw.PreferencesWindow,
+	dir: string,
+	index: number,
+): Adw.ActionRow {
+	const state = inspect(dir);
+
+	const row = new Adw.ActionRow({
+		title: profileName(dir),
+		subtitle: `${dir} · ${hookSummary(state)}`,
+	});
+
+	row.add_suffix(hookButton(ctx, window, dir, index, state));
+
+	const enabled = new Gtk.Switch({
+		active: readProfiles(ctx.settings)[index]?.enabled !== false,
+		tooltip_text: "Show this profile in the panel",
+		valign: Gtk.Align.CENTER,
+	});
+	enabled.connect("notify::active", () => {
+		patch(ctx, index, { enabled: enabled.active });
+	});
+	row.add_suffix(enabled);
+
+	const remove = new Gtk.Button({
+		icon_name: "user-trash-symbolic",
+		tooltip_text: "Remove this profile. Leaves the settings file untouched.",
+		valign: Gtk.Align.CENTER,
+		css_classes: ["flat"],
+	});
+	remove.connect("clicked", () => {
+		const profiles = readProfiles(ctx.settings);
+		profiles.splice(index, 1);
+		writeProfiles(ctx.settings, profiles);
+		rebuildProfiles(ctx, window);
+	});
+	row.add_suffix(remove);
+
+	return row;
+}
+
+function hookButton(
+	ctx: Context,
+	window: Adw.PreferencesWindow,
+	dir: string,
+	index: number,
+	state: HookState,
+): Gtk.Widget {
+	if (!state.exists || !state.readable) {
+		return new Gtk.Label({
+			label: state.exists ? "unreadable settings" : "missing directory",
+			css_classes: ["dim-label"],
 			valign: Gtk.Align.CENTER,
-			css_classes: ["flat"],
 		});
-		add.connect("clicked", () => {
-			this.chooseDirectory(window);
-		});
-
-		this.group.set_header_suffix(add);
-		page.add(this.group);
-
-		this.rebuildProfiles(window);
-
-		return page;
 	}
 
-	private rebuildProfiles(window: Adw.PreferencesWindow): void {
-		for (const row of this.rows) {
-			this.group.remove(row);
-		}
+	const installed = state.installedIn !== null;
 
-		this.rows = readProfiles(this.settings).map((profile, index) => {
-			return this.profileRow(window, profile.dir, index);
-		});
+	const button = new Gtk.Button({
+		label: installed ? "Remove hook" : "Install hook",
+		tooltip_text: hookDetail(state),
+		valign: Gtk.Align.CENTER,
+		css_classes: installed ? ["flat"] : ["suggested-action"],
+	});
 
-		if (this.rows.length === 0) {
-			this.rows.push(
-				new Adw.ActionRow({
-					title: "No profiles yet",
-					subtitle: "Add the config directory a Claude Code profile uses.",
-				}),
-			);
-		}
-
-		for (const row of this.rows) {
-			this.group.add(row);
-		}
-	}
-
-	/** One row per profile: what it is, whether the hook is in, and the controls. */
-	private profileRow(
-		window: Adw.PreferencesWindow,
-		dir: string,
-		index: number,
-	): Adw.ActionRow {
-		const state = inspect(dir);
-
-		const row = new Adw.ActionRow({
-			title: profileName(dir),
-			subtitle: `${dir} · ${hookSummary(state)}`,
-		});
-
-		row.add_suffix(this.hookButton(window, dir, index, state));
-
-		const enabled = new Gtk.Switch({
-			active: readProfiles(this.settings)[index]?.enabled !== false,
-			tooltip_text: "Show this profile in the panel",
-			valign: Gtk.Align.CENTER,
-		});
-		enabled.connect("notify::active", () => {
-			this.patch(index, { enabled: enabled.active });
-		});
-		row.add_suffix(enabled);
-
-		const remove = new Gtk.Button({
-			icon_name: "user-trash-symbolic",
-			tooltip_text: "Remove this profile. Leaves the settings file untouched.",
-			valign: Gtk.Align.CENTER,
-			css_classes: ["flat"],
-		});
-		remove.connect("clicked", () => {
-			const profiles = readProfiles(this.settings);
-			profiles.splice(index, 1);
-			writeProfiles(this.settings, profiles);
-			this.rebuildProfiles(window);
-		});
-		row.add_suffix(remove);
-
-		return row;
-	}
-
-	private hookButton(
-		window: Adw.PreferencesWindow,
-		dir: string,
-		index: number,
-		state: HookState,
-	): Gtk.Widget {
-		if (!state.exists || !state.readable) {
-			return new Gtk.Label({
-				label: state.exists ? "unreadable settings" : "missing directory",
-				css_classes: ["dim-label"],
-				valign: Gtk.Align.CENTER,
-			});
-		}
-
-		const installed = state.installedIn !== null;
-
-		const button = new Gtk.Button({
-			label: installed ? "Remove hook" : "Install hook",
-			tooltip_text: hookDetail(state),
-			valign: Gtk.Align.CENTER,
-			css_classes: installed ? ["flat"] : ["suggested-action"],
-		});
-
-		button.connect("clicked", () => {
-			if (installed) {
-				const result = uninstall(dir, readProfiles(this.settings)[index]?.chain ?? "");
-				if (!result.ok) {
-					window.add_toast(new Adw.Toast({ title: result.error }));
-					return;
-				}
-
-				this.patch(index, { chain: "" });
-			} else {
-				const result = install(dir, this.wrapper);
-				if (!result.ok) {
-					window.add_toast(new Adw.Toast({ title: result.error }));
-					return;
-				}
-
-				this.patch(index, { chain: result.chain });
-			}
-
-			this.rebuildProfiles(window);
-		});
-
-		return button;
-	}
-
-	private chooseDirectory(window: Adw.PreferencesWindow): void {
-		const dialog = new Gtk.FileDialog({
-			title: "Select a Claude Code config directory",
-			modal: true,
-		});
-
-		dialog.set_initial_folder(Gio.File.new_for_path(GLib.get_home_dir()));
-
-		dialog.select_folder(window, null, (source, result) => {
-			let dir: string | null;
-			try {
-				dir = (source as Gtk.FileDialog).select_folder_finish(result).get_path();
-			} catch {
-				// The dialog was dismissed.
+	button.connect("clicked", () => {
+		if (installed) {
+			const result = uninstall(dir, readProfiles(ctx.settings)[index]?.chain ?? "");
+			if (!result.ok) {
+				window.add_toast(new Adw.Toast({ title: result.error }));
 				return;
 			}
 
-			if (dir === null) {
+			patch(ctx, index, { chain: "" });
+		} else {
+			const result = install(dir, ctx.wrapper);
+			if (!result.ok) {
+				window.add_toast(new Adw.Toast({ title: result.error }));
 				return;
 			}
 
-			const profiles = readProfiles(this.settings);
+			patch(ctx, index, { chain: result.chain });
+		}
 
-			if (profiles.some((profile) => profile.dir === dir)) {
-				window.add_toast(new Adw.Toast({ title: "That profile is already configured" }));
-				return;
-			}
+		rebuildProfiles(ctx, window);
+	});
 
-			profiles.push({ dir: dir, enabled: true, chain: "" });
-			writeProfiles(this.settings, profiles);
-			this.rebuildProfiles(window);
-		});
-	}
+	return button;
+}
 
-	private patch(index: number, changes: { enabled?: boolean; chain?: string; }): void {
-		const profiles = readProfiles(this.settings);
-		const profile = profiles[index];
-		if (profile === undefined) {
+function chooseDirectory(ctx: Context, window: Adw.PreferencesWindow): void {
+	const dialog = new Gtk.FileDialog({
+		title: "Select a Claude Code config directory",
+		modal: true,
+	});
+
+	dialog.set_initial_folder(Gio.File.new_for_path(GLib.get_home_dir()));
+
+	dialog.select_folder(window, null, (source, result) => {
+		let dir: string | null;
+		try {
+			dir = (source as Gtk.FileDialog).select_folder_finish(result).get_path();
+		} catch {
+			// The dialog was dismissed.
 			return;
 		}
 
-		profiles[index] = Object.assign(profile, changes);
-		writeProfiles(this.settings, profiles);
+		if (dir === null) {
+			return;
+		}
+
+		const profiles = readProfiles(ctx.settings);
+
+		if (profiles.some((profile) => profile.dir === dir)) {
+			window.add_toast(new Adw.Toast({ title: "That profile is already configured" }));
+			return;
+		}
+
+		profiles.push({ dir: dir, enabled: true, chain: "" });
+		writeProfiles(ctx.settings, profiles);
+		rebuildProfiles(ctx, window);
+	});
+}
+
+function patch(ctx: Context, index: number, changes: { enabled?: boolean; chain?: string; }): void {
+	const profiles = readProfiles(ctx.settings);
+	const profile = profiles[index];
+	if (profile === undefined) {
+		return;
 	}
 
-	/* Panel */
+	profiles[index] = Object.assign(profile, changes);
+	writeProfiles(ctx.settings, profiles);
+}
 
-	private panelPage(): Adw.PreferencesPage {
-		const page = new Adw.PreferencesPage({
-			title: "Panel",
-			icon_name: "preferences-desktop-display-symbolic",
-		});
+/* Panel */
 
-		const pinnable: Choice[] = readProfiles(this.settings).map((profile) => {
-			return [profile.dir, `Only ${profileName(profile.dir)}`];
-		});
+function panelPage(ctx: Context): Adw.PreferencesPage {
+	const page = new Adw.PreferencesPage({
+		title: "Panel",
+		icon_name: "preferences-desktop-display-symbolic",
+	});
 
-		const panel = new Adw.PreferencesGroup({ title: "Panel" });
-		panel.add(this.combo("Show", "panel-source", [...PANEL_STRATEGIES, ...pinnable]));
-		panel.add(this.combo("Limit", "panel-limit", PANEL_LIMITS));
-		panel.add(this.toggle(
-			"Hide without fresh data",
-			"hide-when-stale",
-			"Hide the button entirely instead of dimming it.",
-		));
-		page.add(panel);
+	const pinnable: Choice[] = readProfiles(ctx.settings).map((profile) => {
+		return [profile.dir, `Only ${profileName(profile.dir)}`];
+	});
 
-		const thresholds = new Adw.PreferencesGroup({
-			title: "Thresholds",
-			description: "Percentages at which usage is highlighted.",
-		});
-		thresholds.add(this.spin("Warning", "warning-threshold", {
-			min: 1,
-			max: 100,
-			subtitle: "",
-		}));
-		thresholds.add(this.spin("Critical", "critical-threshold", {
-			min: 1,
-			max: 100,
-			subtitle: "",
-		}));
-		thresholds.add(this.toggle(
-			"Notify on crossing",
-			"notify-threshold",
-			"Send a notification when a profile crosses a threshold upwards.",
-		));
-		page.add(thresholds);
+	const panel = new Adw.PreferencesGroup({ title: "Panel" });
+	panel.add(combo(ctx, "Show", "panel-source", [...PANEL_STRATEGIES, ...pinnable]));
+	panel.add(combo(ctx, "Limit", "panel-limit", PANEL_LIMITS));
+	panel.add(toggle(ctx, "Hide without fresh data", "hide-when-stale", "Hide the button entirely instead of dimming it."));
+	page.add(panel);
 
-		const timing = new Adw.PreferencesGroup({
-			title: "Timing",
-			description: "Payloads only arrive while a Claude Code session renders its "
-				+ "status line, so data ages between sessions.",
-		});
-		timing.add(this.spin("Refresh interval", "refresh-seconds", {
-			min: 5,
-			max: 600,
-			subtitle: "seconds",
-		}));
-		timing.add(this.spin("Data is stale after", "stale-after-minutes", {
-			min: 1,
-			max: 1440,
-			subtitle: "minutes",
-		}));
-		page.add(timing);
+	const thresholds = new Adw.PreferencesGroup({
+		title: "Thresholds",
+		description: "Percentages at which usage is highlighted.",
+	});
+	thresholds.add(spin(ctx, "Warning", "warning-threshold", {
+		min: 1,
+		max: 100,
+		subtitle: "",
+	}));
+	thresholds.add(spin(ctx, "Critical", "critical-threshold", {
+		min: 1,
+		max: 100,
+		subtitle: "",
+	}));
+	thresholds.add(toggle(ctx, "Notify on crossing", "notify-threshold", "Send a notification when a profile crosses a threshold upwards."));
+	page.add(thresholds);
 
-		return page;
-	}
+	const timing = new Adw.PreferencesGroup({
+		title: "Timing",
+		description: "Payloads only arrive while a Claude Code session renders its "
+			+ "status line, so data ages between sessions.",
+	});
+	timing.add(spin(ctx, "Refresh interval", "refresh-seconds", {
+		min: 5,
+		max: 600,
+		subtitle: "seconds",
+	}));
+	timing.add(spin(ctx, "Data is stale after", "stale-after-minutes", {
+		min: 1,
+		max: 1440,
+		subtitle: "minutes",
+	}));
+	page.add(timing);
 
-	/* Building blocks */
+	return page;
+}
 
-	private combo(title: string, key: string, choices: Choice[]): Adw.ComboRow {
-		const values = choices.map((choice) => choice[0]);
+/* Building blocks */
 
-		const row = new Adw.ComboRow({
-			title: title,
-			model: Gtk.StringList.new(choices.map((choice) => choice[1])),
-			selected: Math.max(0, values.indexOf(this.settings.get_string(key))),
-		});
+function combo(ctx: Context, title: string, key: string, choices: Choice[]): Adw.ComboRow {
+	const values = choices.map((choice) => choice[0]);
 
-		row.connect("notify::selected", () => {
-			const value = values[row.selected];
-			if (value !== undefined) {
-				this.settings.set_string(key, value);
-			}
-		});
+	const row = new Adw.ComboRow({
+		title: title,
+		model: Gtk.StringList.new(choices.map((choice) => choice[1])),
+		selected: Math.max(0, values.indexOf(ctx.settings.get_string(key))),
+	});
 
-		return row;
-	}
+	row.connect("notify::selected", () => {
+		const value = values[row.selected];
+		if (value !== undefined) {
+			ctx.settings.set_string(key, value);
+		}
+	});
 
-	private toggle(title: string, key: string, subtitle: string): Adw.SwitchRow {
-		const row = new Adw.SwitchRow({ title: title, subtitle: subtitle });
-		this.settings.bind(key, row, "active", Gio.SettingsBindFlags.DEFAULT);
-		return row;
-	}
+	return row;
+}
 
-	private spin(title: string, key: string, options: SpinOptions): Adw.SpinRow {
-		const row = new Adw.SpinRow({
-			title: title,
-			subtitle: options.subtitle,
-			adjustment: new Gtk.Adjustment({
-				lower: options.min,
-				upper: options.max,
-				step_increment: 1,
-				page_increment: 10,
-			}),
-		});
+function toggle(ctx: Context, title: string, key: string, subtitle: string): Adw.SwitchRow {
+	const row = new Adw.SwitchRow({ title: title, subtitle: subtitle });
+	ctx.settings.bind(key, row, "active", Gio.SettingsBindFlags.DEFAULT);
+	return row;
+}
 
-		this.settings.bind(key, row, "value", Gio.SettingsBindFlags.DEFAULT);
+function spin(ctx: Context, title: string, key: string, options: SpinOptions): Adw.SpinRow {
+	const row = new Adw.SpinRow({
+		title: title,
+		subtitle: options.subtitle,
+		adjustment: new Gtk.Adjustment({
+			lower: options.min,
+			upper: options.max,
+			step_increment: 1,
+			page_increment: 10,
+		}),
+	});
 
-		return row;
-	}
+	ctx.settings.bind(key, row, "value", Gio.SettingsBindFlags.DEFAULT);
+
+	return row;
 }
 
 function hookSummary(state: HookState): string {

@@ -1,5 +1,8 @@
 # Repository Guidelines
 
+- License is GPL-2.0-or-later; extensions.gnome.org rejects anything GPL-2.0 incompatible
+- The icon must stay original artwork, never derived from a vendor's logo
+
 - Keep `README.md` up to date after each change
 - Make sure `bun run typecheck` and `bun run test` pass after significant changes
 - Add or adjust tests when logic changes
@@ -9,7 +12,8 @@
 - `src/*.ts` sources, compiled by `tsc` into `lib/`
 - `lib/` is the complete extension: compiled JavaScript, metadata, stylesheet,
   schema and the status line wrapper. Built, never committed
-- `bin/claude-usage-statusline` is POSIX shell and has no dependencies
+- `bin/claude-usage-statusline.js` runs under `gjs`, outside the shell process.
+  extensions.gnome.org requires scripts to be GJS and rejects bundled executables
 - `test/*.test.js` run under plain `gjs` against `lib/`
 
 # Testing

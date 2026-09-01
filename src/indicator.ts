@@ -21,7 +21,7 @@ import {
 	type StatusPayload,
 	windowPercent,
 } from "./format.js";
-import { inspect } from "./installer.js";
+import { hookInstalled } from "./installer.js";
 import {
 	type Profile,
 	profileName,
@@ -72,6 +72,8 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 	private readonly openHandler: number;
 	private store: Store;
 	private timeout = 0;
+	private ticking = false;
+	private destroyed = false;
 
 	/**
 	 * GObject subclasses have used `constructor` since GJS 1.72, and `super()`
@@ -85,9 +87,9 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 		this.settings = extension.getSettings();
 		this.store = new Store(stateDir());
 
-		// Deliberately not named "-symbolic.svg": St would then recolour it to
-		// the panel foreground and the mark would lose the colour that makes it
-		// readable against both a dark and a light bar.
+		// Deliberately not named "-symbolic.svg": St does not recolour a file
+		// icon loaded this way, so the colour has to live in the SVG. White
+		// matches the panel foreground on the default dark top bar.
 		this.icon = new St.Icon({
 			gicon: Gio.icon_new_for_string(
 				GLib.build_filenamev([extension.path, "icons", "claude-usage.svg"]),
@@ -110,20 +112,21 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 				this.startTimer();
 			}
 
-			this.tick(true);
+			void this.tick(true);
 		});
 
 		this.openHandler = this.popup.connect("open-state-changed", (_menu, open) => {
 			if (open) {
-				this.tick(true);
+				void this.tick(true);
 			}
 		});
 
-		this.tick(true);
+		void this.tick(true);
 		this.startTimer();
 	}
 
 	override destroy(): void {
+		this.destroyed = true;
 		this.stopTimer();
 		this.settings.disconnect(this.settingsHandler);
 		this.popup.disconnect(this.openHandler);
@@ -148,7 +151,7 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 			GLib.PRIORITY_LOW,
 			this.settings.get_int("refresh-seconds"),
 			() => {
-				this.tick(false);
+				void this.tick(false);
 				return GLib.SOURCE_CONTINUE;
 			},
 		);
@@ -166,55 +169,67 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 	 * menu is only rebuilt when its contents can have changed or when it is on
 	 * screen, so an idle desktop does no work beyond a handful of stats.
 	 */
-	private tick(force: boolean): void {
-		const changed = this.store.refresh();
-		const views = this.collect();
+	private async tick(force: boolean): Promise<void> {
+		// A slow disk must not queue up overlapping passes.
+		if (this.ticking) {
+			return;
+		}
 
-		this.renderPanel(views);
-		this.notifyThresholds(views);
+		this.ticking = true;
+		try {
+			const changed = await this.store.refresh();
+			const views = await this.collect();
+			if (this.destroyed) {
+				return;
+			}
 
-		if (force || changed || this.popup.isOpen) {
-			this.rebuildMenu(views);
+			this.renderPanel(views);
+			this.notifyThresholds(views);
+
+			if (force || changed || this.popup.isOpen) {
+				this.rebuildMenu(views);
+			}
+		} finally {
+			this.ticking = false;
 		}
 	}
 
 	/** Merge configured profiles with whatever the state directory holds. */
-	private collect(): ProfileView[] {
+	private async collect(): Promise<ProfileView[]> {
 		const now = GLib.DateTime.new_now_local().to_unix();
 		const staleAfter = this.settings.get_int("stale-after-minutes") * 60;
+		const profiles = readProfiles(this.settings).filter((profile) => {
+			return profile.enabled;
+		});
 
-		return readProfiles(this.settings)
-			.filter((profile) => {
-				return profile.enabled;
-			})
-			.map((profile) => {
-				const entry = this.store.get(profile.dir);
-				const payload = entry ? entry.payload : null;
-				const age = entry ? Math.max(0, now - entry.updatedAt) : Number.POSITIVE_INFINITY;
+		return Promise.all(profiles.map(async (profile) => {
+			const entry = this.store.get(profile.dir);
+			const payload = entry ? entry.payload : null;
+			const age = entry ? Math.max(0, now - entry.updatedAt) : Number.POSITIVE_INFINITY;
 
-				const rows: LimitView[] = limitRows(payload).map((row) => {
-					return {
-						...row,
-						level: this.severityOf(row.percent),
-						countdown: row.resetsAt === null
-							? ""
-							: formatCountdown(row.resetsAt - now),
-					};
-				});
-
+			const rows: LimitView[] = limitRows(payload).map((row) => {
 				return {
-					profile: profile,
-					name: profileName(profile.dir),
-					payload: payload,
-					// inspect() reads a file, so only ask when there is a
-					// reason to: a profile that has never reported.
-					hookInstalled: payload !== null || inspect(profile.dir).installedIn !== null,
-					age: age,
-					stale: age > staleAfter,
-					peak: peakPercent(rows),
-					rows: rows,
+					...row,
+					level: this.severityOf(row.percent),
+					countdown: row.resetsAt === null
+						? ""
+						: formatCountdown(row.resetsAt - now),
 				};
 			});
+
+			return {
+				profile: profile,
+				name: profileName(profile.dir),
+				payload: payload,
+				// Reading settings costs a file read, so only ask when there
+				// is a reason to: a profile that has never reported.
+				hookInstalled: payload !== null || await hookInstalled(profile.dir),
+				age: age,
+				stale: age > staleAfter,
+				peak: peakPercent(rows),
+				rows: rows,
+			};
+		}));
 	}
 
 	private severityOf(percent: number): Severity {

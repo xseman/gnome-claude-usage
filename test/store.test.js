@@ -50,7 +50,7 @@ write(stateDir, "-home-me-.claude--work.json", payload(9));
 write(stateDir, "-home-me-.claude--broken.json", "{ this is not json");
 write(stateDir, "ignored.txt", payload(1));
 
-check("refresh reports a change", store.refresh(), true);
+check("refresh reports a change", await store.refresh(), true);
 check("reads valid payloads", store.get("/home/me/.claude") !== null, true);
 check("ignores non json files", store.get("/home/me/ignored"), null);
 check("skips corrupt payloads", store.get("/home/me/.claude-broken"), null);
@@ -65,11 +65,11 @@ check("keeps dashed directories distinct", store.get("/home/me/.claude-work") !=
 check("does not confuse a dashed dir with a nested one", store.get("/home/me/.claude/work"), null);
 check("records a modification time", store.get("/home/me/.claude").updatedAt > 0, true);
 
-check("an idle refresh is a no-op", store.refresh(), false);
+check("an idle refresh is a no-op", await store.refresh(), false);
 
 // Size is part of the stamp, so a same-second rewrite is still picked up.
 write(stateDir, "-home-me-.claude.json", payload(77.25));
-check("notices a rewritten payload", store.refresh(), true);
+check("notices a rewritten payload", await store.refresh(), true);
 check(
 	"serves the rewritten value",
 	store.get("/home/me/.claude").payload.rate_limits.five_hour.used_percentage,
@@ -77,7 +77,7 @@ check(
 );
 
 remove(stateDir, "-home-me-.claude--work.json");
-check("notices a removed payload", store.refresh(), true);
+check("notices a removed payload", await store.refresh(), true);
 check("forgets the removed profile", store.get("/home/me/.claude-work"), null);
 
 store.destroy();

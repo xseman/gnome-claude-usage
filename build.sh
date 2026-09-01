@@ -16,8 +16,9 @@ cp -r src/schemas src/icons lib/
 glib-compile-schemas lib/schemas
 
 # The wrapper travels with the extension so the preferences dialog can point
-# settings.json at a stable absolute path.
+# settings.json at a stable absolute path. It is run as `gjs -m <path>`, never
+# executed directly, so it carries no executable bit.
 mkdir -p lib/bin
-install -m 0755 bin/claude-usage-statusline lib/bin/claude-usage-statusline
+install -m 0644 bin/claude-usage-statusline.js lib/bin/claude-usage-statusline.js
 
 echo "✓ Built lib/"

@@ -8,10 +8,12 @@
 		"typecheck": "tsc --noEmit",
 		"test": "./test/run.sh",
 		"fmt": "dprint fmt",
-		"fmt:check": "dprint check"
+		"fmt:check": "dprint check",
+		"pack": "./pack.sh"
 	},
 	"devDependencies": {
 		"@girs/gnome-shell": "50.0.4",
 		"typescript": "7.0.2"
-	}
+	},
+	"license": "GPL-2.0-or-later"
 }

@@ -26,7 +26,7 @@ const root = GLib.dir_make_tmp("claude-usage-installer-XXXXXX");
 const wrapper = GLib.build_filenamev([
 	GLib.path_get_dirname(GLib.path_get_dirname(import.meta.url.replace("file://", ""))),
 	"bin",
-	"claude-usage-statusline",
+	"claude-usage-statusline.js",
 ]);
 
 function makeConfig(name, files) {

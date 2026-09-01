@@ -50,7 +50,7 @@ const LIMIT_ORDER = [
 
 /**
  * Turn a config directory into the file name the status line wrapper writes.
- * Mirrors the sed expression in bin/claude-usage-statusline.
+ * Mirrors slugify() in bin/claude-usage-statusline.js.
  *
  * Claude Code slugs project paths by replacing every slash with a dash, which
  * is not injective: `~/.claude-work` and `~/.claude/work` would collide and

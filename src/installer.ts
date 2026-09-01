@@ -62,6 +62,8 @@ export interface UninstallResult {
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
+Gio._promisify(Gio.File.prototype, "load_contents_async");
+
 /** Quote a value for a POSIX shell command line. */
 export function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -136,7 +138,7 @@ export function install(configDir: string, wrapperPath: string): InstallResult {
 	if (previous !== "") {
 		parts.push(`CLAUDE_USAGE_CHAIN=${shellQuote(previous)}`);
 	}
-	parts.push(shellQuote(wrapperPath));
+	parts.push("gjs", "-m", shellQuote(wrapperPath));
 
 	settings.statusLine = { type: "command", command: parts.join(" ") };
 
@@ -170,6 +172,38 @@ export function uninstall(configDir: string, chain: string): UninstallResult {
 	const error = writeSettings(configDir, file, settings);
 
 	return { ok: error === "", error: error };
+}
+
+/**
+ * Whether the wrapper is installed in any settings file of a profile. The
+ * asynchronous counterpart of inspect(), for the shell process, which must not
+ * block on a file read.
+ */
+export async function hookInstalled(configDir: string): Promise<boolean> {
+	for (const name of SETTINGS_FILES) {
+		const file = Gio.File.new_for_path(GLib.build_filenamev([configDir, name]));
+
+		let text: string;
+		try {
+			const [contents] = await file.load_contents_async(null);
+			text = decoder.decode(contents);
+		} catch {
+			continue;
+		}
+
+		let parsed: ClaudeSettings;
+		try {
+			parsed = JSON.parse(text) as ClaudeSettings;
+		} catch {
+			continue;
+		}
+
+		if (commandOf(parsed).includes(MARKER)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /** Parse one settings file. A missing file reads as an empty object. */

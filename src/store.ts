@@ -6,6 +6,11 @@ import {
 	type StatusPayload,
 } from "./format.js";
 
+// Promise-returning variants of the async Gio calls used below.
+Gio._promisify(Gio.File.prototype, "enumerate_children_async");
+Gio._promisify(Gio.File.prototype, "load_contents_async");
+Gio._promisify(Gio.FileEnumerator.prototype, "next_files_async");
+
 /** A payload on disk, with the time the wrapper wrote it. */
 export interface StoreEntry {
 	payload: StatusPayload;
@@ -20,7 +25,7 @@ interface CachedEntry {
 }
 
 /**
- * Reads the status payloads written by bin/claude-usage-statusline.
+ * Reads the status payloads written by bin/claude-usage-statusline.js.
  *
  * The store is the only part of the extension that touches the disk. Payloads
  * are a few hundred bytes each, so a refresh stats a handful of files and only
@@ -47,7 +52,6 @@ export class Store {
 	constructor(dir: string) {
 		this.dir = Gio.File.new_for_path(dir);
 		ensureDirectory(this.dir);
-		this.refresh();
 	}
 
 	/** Entry for a config directory, or null when that profile never reported. */
@@ -61,13 +65,14 @@ export class Store {
 
 	/**
 	 * Re-read what changed on disk. Returns true when any payload appeared,
-	 * vanished or moved.
+	 * vanished or moved. All IO is asynchronous: the shell process must never
+	 * block on a file, however small.
 	 */
-	refresh(): boolean {
+	async refresh(): Promise<boolean> {
 		const seen = new Set<string>();
 		let changed = false;
 
-		for (const info of this.list()) {
+		for (const info of await this.list()) {
 			const name = info.get_name();
 			if (!name.endsWith(".json")) {
 				continue;
@@ -91,7 +96,7 @@ export class Store {
 			// every refresh for as long as it stays corrupt.
 			this.entries.set(slug, {
 				stamp: stamp,
-				payload: this.read(this.dir.get_child(name)),
+				payload: await this.read(this.dir.get_child(name)),
 				updatedAt: updatedAt,
 			});
 		}
@@ -110,25 +115,28 @@ export class Store {
 		this.entries.clear();
 	}
 
-	private list(): Gio.FileInfo[] {
-		const infos: Gio.FileInfo[] = [];
-
+	private async list(): Promise<Gio.FileInfo[]> {
 		let enumerator: Gio.FileEnumerator;
 		try {
-			enumerator = this.dir.enumerate_children(
+			enumerator = await this.dir.enumerate_children_async(
 				"standard::name,standard::size,time::modified",
 				Gio.FileQueryInfoFlags.NONE,
+				GLib.PRIORITY_DEFAULT,
 				null,
 			);
 		} catch {
 			// The directory can be removed underneath us at any time.
-			return infos;
+			return [];
 		}
 
-		let info = enumerator.next_file(null);
-		while (info !== null) {
-			infos.push(info);
-			info = enumerator.next_file(null);
+		const infos: Gio.FileInfo[] = [];
+		for (;;) {
+			const batch = await enumerator.next_files_async(64, GLib.PRIORITY_DEFAULT, null);
+			if (batch.length === 0) {
+				break;
+			}
+
+			infos.push(...batch);
 		}
 
 		enumerator.close(null);
@@ -136,10 +144,10 @@ export class Store {
 		return infos;
 	}
 
-	private read(file: Gio.File): StatusPayload | null {
+	private async read(file: Gio.File): Promise<StatusPayload | null> {
 		try {
-			const [ok, contents] = file.load_contents(null);
-			return ok ? JSON.parse(this.decoder.decode(contents)) as StatusPayload : null;
+			const [contents] = await file.load_contents_async(null);
+			return JSON.parse(this.decoder.decode(contents)) as StatusPayload;
 		} catch {
 			// A half written file resolves itself on the next refresh, and a
 			// corrupt one must not take the panel down with it.

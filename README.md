@@ -219,7 +219,7 @@ kept as `CLAUDE_USAGE_CHAIN`, the original file is copied to
 {
 	"statusLine": {
 		"type": "command",
-		"command": "CLAUDE_USAGE_DIR='/home/me/.claude' CLAUDE_USAGE_CHAIN='~/.claude/status-line.sh' '/home/me/.local/share/gnome-shell/extensions/claude-usage@xseman.github.io/bin/claude-usage-statusline'"
+		"command": "CLAUDE_USAGE_DIR='/home/me/.claude' CLAUDE_USAGE_CHAIN='~/.claude/status-line.sh' gjs -m '/home/me/.local/share/gnome-shell/extensions/claude-usage@xseman.github.io/bin/claude-usage-statusline.js'"
 	}
 }
 ```
@@ -256,7 +256,8 @@ slugs skip that step and would map both to the same name.
 - **GNOME Shell 48 or newer.** Developed against 50.
 - **Claude Code** on a subscription plan. API key users have no rate limit
   windows to report.
-- A **POSIX shell**. The wrapper needs nothing else, no `jq`, no `python`.
+- Nothing beyond GNOME's own `gjs`, which runs both the extension and the
+  status line wrapper. No `jq`, no `python`.
 - **Bun and TypeScript to build.** Nothing beyond GJS is needed to run the
   built extension.
 
@@ -281,7 +282,7 @@ bun run typecheck   # tsc --noEmit, strict
 bun run build       # src/*.ts -> lib/
 bun run test        # builds, then runs the suites under gjs
 bun run fmt
-shellcheck bin/claude-usage-statusline build.sh install.sh test/run.sh
+shellcheck build.sh install.sh pack.sh test/run.sh
 ```
 
 ### Reloading an installed copy
@@ -289,11 +290,11 @@ shellcheck bin/claude-usage-statusline build.sh install.sh test/run.sh
 `bun run build && ./install.sh` replaces the files, but what it takes to pick
 them up differs per file:
 
-| Changed                       | To apply                                     |
-| ----------------------------- | -------------------------------------------- |
-| `prefs.js`                    | Close the preferences window and reopen it   |
-| `bin/claude-usage-statusline` | Nothing, Claude Code runs it on every render |
-| Anything else                 | Log out and back in                          |
+| Changed                          | To apply                                     |
+| -------------------------------- | -------------------------------------------- |
+| `prefs.js`                       | Close the preferences window and reopen it   |
+| `bin/claude-usage-statusline.js` | Nothing, Claude Code runs it on every render |
+| Anything else                    | Log out and back in                          |
 
 GNOME Shell imports `extension.js` once per session and caches the module, so
 `gnome-extensions disable`/`enable` re-runs `enable()` against the old code. With
@@ -331,6 +332,31 @@ constrains what may import what. See [AGENTS.md](AGENTS.md).
 ```sh
 journalctl -f -o cat /usr/bin/gnome-shell
 ```
+
+## Releasing
+
+`bun run pack` builds `dist/claude-usage@xseman.github.io.shell-extension.zip`,
+the bundle extensions.gnome.org takes. Every module is passed to
+`gnome-extensions pack` explicitly, because on its own it bundles only
+`extension.js`, `prefs.js`, `metadata.json`, `stylesheet.css` and the schema.
+
+Releases follow release-please: conventional commits on `master` open a release
+PR, merging it tags a version, bumps `version-name` in `metadata.json` and
+attaches the zip to the GitHub release. extensions.gnome.org has no upload API,
+so the zip is submitted by hand at <https://extensions.gnome.org/upload/>, after
+running their static analyzer:
+
+```sh
+pip install -U shexli
+shexli dist/*.shell-extension.zip
+```
+
+## License
+
+GPL-2.0-or-later, see [LICENSE](LICENSE). GNOME Shell is GPL-2.0-or-later and
+extensions.gnome.org requires compatible terms.
+
+Unofficial: not affiliated with Anthropic. The icon is original artwork.
 
 ## Related
 
