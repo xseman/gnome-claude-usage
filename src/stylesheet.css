@@ -12,11 +12,6 @@
 	color: #ff7b63;
 }
 
-.claude-usage-panel-label.claude-usage-stale,
-.claude-usage-panel-label.claude-usage-unknown {
-	color: rgba(255, 255, 255, 0.5);
-}
-
 /* Profile header */
 
 .claude-usage-header {
@@ -30,7 +25,6 @@
 
 .claude-usage-age {
 	font-size: 0.85em;
-	color: rgba(255, 255, 255, 0.6);
 }
 
 .claude-usage-age.claude-usage-stale {
@@ -69,7 +63,6 @@
 .claude-usage-row-countdown {
 	min-width: 80px;
 	text-align: right;
-	color: rgba(255, 255, 255, 0.6);
 }
 
 /* Usage bar */
