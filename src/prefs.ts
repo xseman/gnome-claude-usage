@@ -6,17 +6,17 @@ import Gtk from "gi://Gtk";
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 import {
+	type HookState,
 	inspect,
 	install,
 	uninstall,
 } from "./installer.js";
 import {
-	basename,
-	type Profile,
+	profileName,
 	readProfiles,
 	writeProfiles,
 } from "./profiles.js";
-import { defaultStateDir } from "./store.js";
+import { stateDir } from "./store.js";
 
 /** Value stored in GSettings paired with the label shown for it. */
 type Choice = [string, string];
@@ -27,10 +27,10 @@ interface SpinOptions {
 	subtitle: string;
 }
 
-const PANEL_SOURCES: Choice[] = [
+/** Strategies the panel button can follow, ahead of the pinnable profiles. */
+const PANEL_STRATEGIES: Choice[] = [
 	["highest", "Closest to its limit"],
 	["active", "Most recently active"],
-	["profile", "A specific profile"],
 	["all", "All profiles side by side"],
 ];
 
@@ -38,12 +38,6 @@ const PANEL_LIMITS: Choice[] = [
 	["five-hour", "5 hour window"],
 	["seven-day", "7 day window"],
 	["highest", "Whichever is highest"],
-];
-
-const PANEL_FORMATS: Choice[] = [
-	["icon", "Icon only"],
-	["text", "Percentage only"],
-	["both", "Icon and percentage"],
 ];
 
 export default class ClaudeUsagePreferences extends ExtensionPreferences {
@@ -60,7 +54,6 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 
 		window.add(this.profilesPage(window));
 		window.add(this.panelPage());
-		window.add(this.advancedPage());
 	}
 
 	/* Profiles */
@@ -74,7 +67,8 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		this.group = new Adw.PreferencesGroup({
 			title: "Profiles",
 			description: "One entry per Claude Code config directory, the value "
-				+ "CLAUDE_CONFIG_DIR would be set to.",
+				+ `CLAUDE_CONFIG_DIR would be set to. Only ${stateDir()} is read, `
+				+ "never your credentials, and never the network.",
 		});
 
 		const add = new Gtk.Button({
@@ -90,16 +84,6 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		this.group.set_header_suffix(add);
 		page.add(this.group);
 
-		const note = new Adw.PreferencesGroup();
-		note.add(
-			new Adw.ActionRow({
-				title: "The extension only reads the status line payloads",
-				subtitle: `It watches ${this.stateDir()} and never reads your `
-					+ "credentials or talks to the network.",
-			}),
-		);
-		page.add(note);
-
 		this.rebuildProfiles(window);
 
 		return page;
@@ -111,7 +95,7 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		}
 
 		this.rows = readProfiles(this.settings).map((profile, index) => {
-			return this.profileRow(window, profile, index);
+			return this.profileRow(window, profile.dir, index);
 		});
 
 		if (this.rows.length === 0) {
@@ -128,20 +112,24 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		}
 	}
 
+	/** One row per profile: what it is, whether the hook is in, and the controls. */
 	private profileRow(
 		window: Adw.PreferencesWindow,
-		profile: Profile,
+		dir: string,
 		index: number,
-	): Adw.ExpanderRow {
-		const state = inspect(profile.dir);
+	): Adw.ActionRow {
+		const state = inspect(dir);
 
-		const row = new Adw.ExpanderRow({
-			title: profile.name,
-			subtitle: `${profile.dir} · hook ${state.installed ? "installed" : "missing"}`,
+		const row = new Adw.ActionRow({
+			title: profileName(dir),
+			subtitle: `${dir} · ${hookSummary(state)}`,
 		});
 
+		row.add_suffix(this.hookButton(window, dir, index, state));
+
 		const enabled = new Gtk.Switch({
-			active: profile.enabled,
+			active: readProfiles(this.settings)[index]?.enabled !== false,
+			tooltip_text: "Show this profile in the panel",
 			valign: Gtk.Align.CENTER,
 		});
 		enabled.connect("notify::active", () => {
@@ -149,70 +137,49 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		});
 		row.add_suffix(enabled);
 
-		row.add_row(entryRow("Name", profile.name, (text) => {
-			this.patch(index, { name: text });
-			this.rebuildProfiles(window);
-		}));
-
-		row.add_row(entryRow("Config directory", profile.dir, (text) => {
-			this.patch(index, { dir: text });
-			this.rebuildProfiles(window);
-		}));
-
-		row.add_row(this.hookRow(window, profile, index));
-
-		const remove = new Adw.ActionRow({
-			title: "Remove profile",
-			subtitle: "Leaves settings.json untouched. Remove the hook first.",
-		});
-		const removeButton = new Gtk.Button({
+		const remove = new Gtk.Button({
 			icon_name: "user-trash-symbolic",
+			tooltip_text: "Remove this profile. Leaves the settings file untouched.",
 			valign: Gtk.Align.CENTER,
-			css_classes: ["flat", "destructive-action"],
+			css_classes: ["flat"],
 		});
-		removeButton.connect("clicked", () => {
+		remove.connect("clicked", () => {
 			const profiles = readProfiles(this.settings);
 			profiles.splice(index, 1);
 			writeProfiles(this.settings, profiles);
 			this.rebuildProfiles(window);
 		});
-		remove.add_suffix(removeButton);
-		row.add_row(remove);
+		row.add_suffix(remove);
 
 		return row;
 	}
 
-	private hookRow(
+	private hookButton(
 		window: Adw.PreferencesWindow,
-		profile: Profile,
+		dir: string,
 		index: number,
-	): Adw.ActionRow {
-		const row = new Adw.ActionRow({ title: "Status line hook" });
-		const state = inspect(profile.dir);
-
-		if (!state.exists) {
-			row.subtitle = "The config directory does not exist";
-			return row;
+		state: HookState,
+	): Gtk.Widget {
+		if (!state.exists || !state.readable) {
+			return new Gtk.Label({
+				label: state.exists ? "unreadable settings" : "missing directory",
+				css_classes: ["dim-label"],
+				valign: Gtk.Align.CENTER,
+			});
 		}
 
-		if (!state.readable) {
-			row.subtitle = "settings.json is not readable JSON";
-			return row;
-		}
-
-		row.subtitle = state.installed
-			? profile.chain === "" ? "Installed" : `Installed, chaining ${profile.chain}`
-			: "Not installed, this profile stays dark until it is";
+		const installed = state.installedIn !== null;
 
 		const button = new Gtk.Button({
-			label: state.installed ? "Remove" : "Install",
+			label: installed ? "Remove hook" : "Install hook",
+			tooltip_text: hookDetail(state),
 			valign: Gtk.Align.CENTER,
-			css_classes: state.installed ? ["flat"] : ["suggested-action"],
+			css_classes: installed ? ["flat"] : ["suggested-action"],
 		});
 
 		button.connect("clicked", () => {
-			if (state.installed) {
-				const result = uninstall(profile.dir, profile.chain);
+			if (installed) {
+				const result = uninstall(dir, readProfiles(this.settings)[index]?.chain ?? "");
 				if (!result.ok) {
 					window.add_toast(new Adw.Toast({ title: result.error }));
 					return;
@@ -220,7 +187,7 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 
 				this.patch(index, { chain: "" });
 			} else {
-				const result = install(profile.dir, this.wrapper);
+				const result = install(dir, this.wrapper);
 				if (!result.ok) {
 					window.add_toast(new Adw.Toast({ title: result.error }));
 					return;
@@ -232,9 +199,7 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 			this.rebuildProfiles(window);
 		});
 
-		row.add_suffix(button);
-
-		return row;
+		return button;
 	}
 
 	private chooseDirectory(window: Adw.PreferencesWindow): void {
@@ -265,19 +230,13 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 				return;
 			}
 
-			profiles.push({
-				name: basename(dir).replace(/^\./, ""),
-				dir: dir,
-				enabled: true,
-				chain: "",
-			});
-
+			profiles.push({ dir: dir, enabled: true, chain: "" });
 			writeProfiles(this.settings, profiles);
 			this.rebuildProfiles(window);
 		});
 	}
 
-	private patch(index: number, changes: Partial<Profile>): void {
+	private patch(index: number, changes: { enabled?: boolean; chain?: string; }): void {
 		const profiles = readProfiles(this.settings);
 		const profile = profiles[index];
 		if (profile === undefined) {
@@ -297,14 +256,12 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		});
 
 		const pinnable: Choice[] = readProfiles(this.settings).map((profile) => {
-			return [profile.dir, profile.name];
+			return [profile.dir, `Only ${profileName(profile.dir)}`];
 		});
 
 		const panel = new Adw.PreferencesGroup({ title: "Panel" });
-		panel.add(this.combo("Show", "panel-source", PANEL_SOURCES));
-		panel.add(this.combo("Pinned profile", "panel-profile", pinnable));
+		panel.add(this.combo("Show", "panel-source", [...PANEL_STRATEGIES, ...pinnable]));
 		panel.add(this.combo("Limit", "panel-limit", PANEL_LIMITS));
-		panel.add(this.combo("Contents", "panel-format", PANEL_FORMATS));
 		panel.add(this.toggle(
 			"Hide without fresh data",
 			"hide-when-stale",
@@ -333,37 +290,22 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 		));
 		page.add(thresholds);
 
-		return page;
-	}
-
-	/* Advanced */
-
-	private advancedPage(): Adw.PreferencesPage {
-		const page = new Adw.PreferencesPage({
-			title: "Advanced",
-			icon_name: "applications-engineering-symbolic",
-		});
-
-		const group = new Adw.PreferencesGroup({
-			title: "Advanced",
+		const timing = new Adw.PreferencesGroup({
+			title: "Timing",
 			description: "Payloads only arrive while a Claude Code session renders its "
 				+ "status line, so data ages between sessions.",
 		});
-
-		group.add(entryRow("State directory", this.settings.get_string("state-dir"), (text) => {
-			this.settings.set_string("state-dir", text);
-		}));
-		group.add(this.spin("Refresh interval", "refresh-seconds", {
+		timing.add(this.spin("Refresh interval", "refresh-seconds", {
 			min: 5,
 			max: 600,
 			subtitle: "seconds",
 		}));
-		group.add(this.spin("Data is stale after", "stale-after-minutes", {
+		timing.add(this.spin("Data is stale after", "stale-after-minutes", {
 			min: 1,
 			max: 1440,
 			subtitle: "minutes",
 		}));
-		page.add(group);
+		page.add(timing);
 
 		return page;
 	}
@@ -375,11 +317,8 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 
 		const row = new Adw.ComboRow({
 			title: title,
-			model: Gtk.StringList.new(
-				choices.length === 0 ? ["None"] : choices.map((choice) => choice[1]),
-			),
+			model: Gtk.StringList.new(choices.map((choice) => choice[1])),
 			selected: Math.max(0, values.indexOf(this.settings.get_string(key))),
-			sensitive: choices.length > 0,
 		});
 
 		row.connect("notify::selected", () => {
@@ -414,23 +353,38 @@ export default class ClaudeUsagePreferences extends ExtensionPreferences {
 
 		return row;
 	}
-
-	private stateDir(): string {
-		const configured = this.settings.get_string("state-dir");
-		return configured === "" ? defaultStateDir() : configured;
-	}
 }
 
-function entryRow(title: string, text: string, onApply: (text: string) => void): Adw.EntryRow {
-	const row = new Adw.EntryRow({
-		title: title,
-		text: text,
-		show_apply_button: true,
-	});
+function hookSummary(state: HookState): string {
+	if (!state.exists) {
+		return "directory does not exist";
+	}
 
-	row.connect("apply", () => {
-		onApply(row.text);
-	});
+	if (!state.readable) {
+		return "settings are not readable JSON";
+	}
 
-	return row;
+	if (state.installedIn !== null) {
+		return `hook in ${state.installedIn}`;
+	}
+
+	return state.foreign === null
+		? "no hook"
+		: `no hook, ${state.foreign.file} sets its own status line`;
+}
+
+/** Spelled out on the button, where there is room for the whole story. */
+function hookDetail(state: HookState): string {
+	if (state.installedIn !== null) {
+		return `Installed in ${state.installedIn}. Removing restores what was there before.`;
+	}
+
+	if (state.foreign !== null) {
+		return `${state.foreign.file} already sets a status line:\n\n${state.foreign.command}`
+			+ `\n\nInstalling writes to that same file and chains this command, so it keeps `
+			+ `running. The original is backed up first.`;
+	}
+
+	return `Writes a statusLine entry to ${state.target}. `
+		+ "Until then this profile reports nothing.";
 }

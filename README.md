@@ -111,6 +111,9 @@ rotation can log you out, so the extension stays away from it.
 │    5 h        ██░░░░░░░░░░░░░░░░░░░    9 %    0 h 48 m     │
 │    7 d        █████░░░░░░░░░░░░░░░░   24 %    2 d 17 h     │
 ├────────────────────────────────────────────────────────────┤
+│  demo · Opus 5                                       now   │
+│    No rate limits reported yet                             │
+├────────────────────────────────────────────────────────────┤
 │  archive                                        no data    │
 │    Status line hook not installed                          │
 ├────────────────────────────────────────────────────────────┤
@@ -122,28 +125,22 @@ rotation can log you out, so the extension stays away from it.
 
 ```
 ╭─ Claude Usage ───────────────────────────────────────── - □ x ─╮
-│            [ Profiles ]   Panel   Advanced                     │
+│                 [ Profiles ]      Panel                        │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │   PROFILES                                                 +   │
+│   One entry per Claude Code config directory, the value        │
+│   CLAUDE_CONFIG_DIR would be set to.                           │
 │  ╭──────────────────────────────────────────────────────────╮  │
-│  │ work                                         [ ●━━ ]  ▾  │  │
-│  │ ~/.claude · hook installed                               │  │
+│  │ claude                       [ Remove hook ]  (O )  [x]  │  │
+│  │ ~/.claude · hook in settings.json                        │  │
 │  ├──────────────────────────────────────────────────────────┤  │
-│  │   Name              [ work                          ]    │  │
-│  │   Config directory  [ /home/me/.claude              ]    │  │
-│  │                                                          │  │
-│  │   Status line hook                      ┌─────────────┐  │  │
-│  │   Installed, chaining ~/.claude/....sh  │   Remove    │  │  │
-│  │                                         └─────────────┘  │  │
-│  │                                                          │  │
-│  │   Remove profile                                    Del  │  │
+│  │ claude-work                  [ Install hook ] (O )  [x]  │  │
+│  │ ~/.claude-work · no hook, settings.local.json sets its   │  │
+│  │ own status line                                          │  │
 │  ├──────────────────────────────────────────────────────────┤  │
-│  │ personal                                     [ ●━━ ]  ▸  │  │
-│  │ ~/.claude-personal · hook installed                      │  │
-│  ├──────────────────────────────────────────────────────────┤  │
-│  │ archive                                      [ ━━○ ]  ▸  │  │
-│  │ ~/.claude-archive · hook missing                         │  │
+│  │ claude-demo                  [ Install hook ] ( O)  [x]  │  │
+│  │ ~/.claude-demo · no hook                                 │  │
 │  ╰──────────────────────────────────────────────────────────╯  │
 ╰────────────────────────────────────────────────────────────────╯
 ```
@@ -152,18 +149,18 @@ rotation can log you out, so the extension stays away from it.
 
 ```
 ╭─ Claude Usage ───────────────────────────────────────── - □ x ─╮
-│              Profiles   [ Panel ]   Advanced                   │
+│                  Profiles     [ Panel ]                        │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │   PANEL                                                        │
 │  ╭──────────────────────────────────────────────────────────╮  │
 │  │  Show          ( Closest to its limit                ▾ ) │  │
 │  │                  Most recently active                    │  │
-│  │                  A specific profile                      │  │
 │  │                  All profiles side by side               │  │
+│  │                  Only claude                             │  │
+│  │                  Only claude-work                        │  │
 │  ├──────────────────────────────────────────────────────────┤  │
 │  │  Limit         ( 5 hour window                       ▾ ) │  │
-│  │  Contents      ( Icon and percentage                 ▾ ) │  │
 │  │  Hide without fresh data                       [ ━━○ ]   │  │
 │  ╰──────────────────────────────────────────────────────────╯  │
 │                                                                │
@@ -172,6 +169,12 @@ rotation can log you out, so the extension stays away from it.
 │  │  Warning                                   [  70  ] ▲▼   │  │
 │  │  Critical                                  [  90  ] ▲▼   │  │
 │  │  Notify on crossing                            [ ●━━ ]   │  │
+│  ╰──────────────────────────────────────────────────────────╯  │
+│                                                                │
+│   TIMING                                                       │
+│  ╭──────────────────────────────────────────────────────────╮  │
+│  │  Refresh interval   seconds                [  30  ] ▲▼   │  │
+│  │  Data is stale after   minutes             [  60  ] ▲▼   │  │
 │  ╰──────────────────────────────────────────────────────────╯  │
 ╰────────────────────────────────────────────────────────────────╯
 ```
@@ -200,9 +203,19 @@ gnome-extensions prefs claude-usage@xseman.github.io
 
 ## Configuration
 
-Add one profile per config directory and press **Install** on its status line
-hook. That rewrites only the `statusLine` key of that profile's `settings.json`,
-after copying the original to `settings.json.bak-claude-usage`:
+Add one profile per config directory and press **Install hook**.
+
+### Where the hook goes
+
+Claude Code merges several settings sources, and within a config directory
+`settings.local.json` outranks `settings.json`. Writing to the lower file while
+the higher one defines a status line would install a hook that silently never
+runs, so the wrapper goes into **whichever file already defines a status line**,
+and into `settings.json` when neither does.
+
+Nothing is ever overwritten. Before writing, the existing command is read and
+kept as `CLAUDE_USAGE_CHAIN`, the original file is copied to
+`<name>.bak-claude-usage`, and only the `statusLine` key is touched:
 
 ```jsonc
 {
@@ -213,10 +226,14 @@ after copying the original to `settings.json.bak-claude-usage`:
 }
 ```
 
-`CLAUDE_USAGE_CHAIN` keeps receiving the same stdin, so an existing status line
-goes on working. **Remove** puts it back. Claude Code watches `settings.json`,
-so a running session picks the hook up without a restart, and installing twice
-is a no-op.
+The chained command keeps receiving the same stdin, so an existing status line
+goes on working. Each profile row says which file holds the hook, or which file
+already has a status line of its own; the button's tooltip spells out what
+pressing it will do. **Remove hook** restores the recorded command in the file
+it was written to.
+
+Claude Code watches its settings, so a running session picks the hook up without
+a restart, and installing twice is a no-op.
 
 Setting the command by hand works too. `CLAUDE_USAGE_DIR` must be the config
 directory the profile represents; without it the wrapper falls back to

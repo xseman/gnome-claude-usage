@@ -5,22 +5,46 @@ import GLib from "gi://GLib";
  * Installs the status line wrapper into a Claude Code config directory.
  *
  * Claude Code only hands the rate limit payload to the command configured as
- * `statusLine`, so a profile stays dark until its settings.json points at the
+ * `statusLine`, so a profile stays dark until its settings point at the
  * wrapper. Whatever status line was configured before is preserved and chained,
  * never dropped.
  */
 
-/** The parts of a Claude Code settings.json this module touches. */
+/**
+ * Settings files a config directory can hold, highest precedence first.
+ *
+ * Claude Code merges several sources and `settings.local.json` outranks
+ * `settings.json`. Writing to the lower one while the higher one defines a
+ * status line would install a hook that silently never runs, so the wrapper
+ * goes into whichever file already owns the status line.
+ */
+const SETTINGS_FILES = [
+	"settings.local.json",
+	"settings.json",
+] as const;
+
+/** Substring that identifies a command as ours. */
+const MARKER = "claude-usage-statusline";
+
+/** Suffix of the one-time backup taken before the first edit. */
+const BACKUP_SUFFIX = ".bak-claude-usage";
+
+/** The parts of a Claude Code settings file this module touches. */
 interface ClaudeSettings {
 	statusLine?: { type: string; command: string; };
 	[key: string]: unknown;
 }
 
-/** What a profile's settings.json currently says. */
+/** What a profile's settings currently say. */
 export interface HookState {
 	exists: boolean;
 	readable: boolean;
-	installed: boolean;
+	/** Set when the wrapper is installed, to the file holding it. */
+	installedIn: string | null;
+	/** A status line this extension did not write, and the file holding it. */
+	foreign: { file: string; command: string; } | null;
+	/** File `install` would write to. */
+	target: string;
 }
 
 export interface InstallResult {
@@ -35,12 +59,6 @@ export interface UninstallResult {
 	error: string;
 }
 
-/** Substring that identifies a command as ours. */
-const MARKER = "claude-usage-statusline";
-
-/** Suffix of the one-time backup taken before the first edit. */
-const BACKUP_SUFFIX = ".bak-claude-usage";
-
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
@@ -50,37 +68,70 @@ export function shellQuote(value: string): string {
 }
 
 /**
- * Current state of a profile: whether its config directory exists, whether its
- * settings parse and whether the configured status line is ours.
+ * Look at every settings file a profile can have and report what is there:
+ * whether the wrapper is installed, whether some other status line already
+ * exists, and which file an install would touch.
  */
 export function inspect(configDir: string): HookState {
 	const exists = GLib.file_test(configDir, GLib.FileTest.IS_DIR);
-	const settings = readSettings(configDir);
+	let readable = true;
+	let installedIn: string | null = null;
+	let foreign: { file: string; command: string; } | null = null;
+	let owner: string | null = null;
+
+	for (const file of SETTINGS_FILES) {
+		const settings = readSettings(configDir, file);
+		if (settings === null) {
+			readable = false;
+			continue;
+		}
+
+		const command = commandOf(settings);
+		if (command === "") {
+			continue;
+		}
+
+		// The first file with a status line is the one Claude Code obeys.
+		owner ??= file;
+
+		if (command.includes(MARKER)) {
+			installedIn ??= file;
+		} else {
+			foreign ??= { file: file, command: command };
+		}
+	}
 
 	return {
 		exists: exists,
-		readable: settings !== null,
-		installed: commandOf(settings).includes(MARKER),
+		readable: readable,
+		installedIn: installedIn,
+		foreign: foreign,
+		target: owner ?? "settings.json",
 	};
 }
 
 /**
- * Point the profile's status line at the wrapper.
- *
- * Returns the command that was configured before, so it can be restored on
- * uninstall. Installing twice is a no-op rather than a nested chain.
+ * Point the profile's status line at the wrapper, keeping any command that was
+ * already there as a chained one. Installing twice is a no-op rather than a
+ * nested chain.
  */
 export function install(configDir: string, wrapperPath: string): InstallResult {
-	const settings = readSettings(configDir);
-	if (settings === null) {
-		return { ok: false, error: `${settingsPath(configDir)} is not readable JSON`, chain: "" };
-	}
+	const state = inspect(configDir);
 
-	const previous = commandOf(settings);
-	if (previous.includes(MARKER)) {
+	if (state.installedIn !== null) {
 		return { ok: true, error: "", chain: "" };
 	}
 
+	const settings = readSettings(configDir, state.target);
+	if (settings === null) {
+		return {
+			ok: false,
+			error: `${state.target} is not readable JSON`,
+			chain: "",
+		};
+	}
+
+	const previous = commandOf(settings);
 	const parts = [`CLAUDE_USAGE_DIR=${shellQuote(configDir)}`];
 	if (previous !== "") {
 		parts.push(`CLAUDE_USAGE_CHAIN=${shellQuote(previous)}`);
@@ -89,19 +140,25 @@ export function install(configDir: string, wrapperPath: string): InstallResult {
 
 	settings.statusLine = { type: "command", command: parts.join(" ") };
 
-	const error = writeSettings(configDir, settings);
+	const error = writeSettings(configDir, state.target, settings);
 
 	return { ok: error === "", error: error, chain: previous };
 }
 
 /**
- * Restore the profile's status line. The command recorded at install time wins;
- * without one the status line is removed entirely.
+ * Restore the profile's status line in whichever file the wrapper ended up in.
+ * The command recorded at install time wins; without one the status line is
+ * removed entirely.
  */
 export function uninstall(configDir: string, chain: string): UninstallResult {
-	const settings = readSettings(configDir);
+	const file = inspect(configDir).installedIn;
+	if (file === null) {
+		return { ok: true, error: "" };
+	}
+
+	const settings = readSettings(configDir, file);
 	if (settings === null) {
-		return { ok: false, error: `${settingsPath(configDir)} is not readable JSON` };
+		return { ok: false, error: `${file} is not readable JSON` };
 	}
 
 	if (chain !== "") {
@@ -110,18 +167,18 @@ export function uninstall(configDir: string, chain: string): UninstallResult {
 		delete settings.statusLine;
 	}
 
-	const error = writeSettings(configDir, settings);
+	const error = writeSettings(configDir, file, settings);
 
 	return { ok: error === "", error: error };
 }
 
-/** Parse a profile's settings.json. A missing file reads as an empty object. */
-export function readSettings(configDir: string): ClaudeSettings | null {
-	const file = Gio.File.new_for_path(settingsPath(configDir));
+/** Parse one settings file. A missing file reads as an empty object. */
+export function readSettings(configDir: string, file: string): ClaudeSettings | null {
+	const path = GLib.build_filenamev([configDir, file]);
 
 	let contents: string;
 	try {
-		const [ok, bytes] = file.load_contents(null);
+		const [ok, bytes] = Gio.File.new_for_path(path).load_contents(null);
 		if (!ok) {
 			return null;
 		}
@@ -142,19 +199,16 @@ export function readSettings(configDir: string): ClaudeSettings | null {
 	}
 }
 
-function settingsPath(configDir: string): string {
-	return GLib.build_filenamev([configDir, "settings.json"]);
+function commandOf(settings: ClaudeSettings): string {
+	return typeof settings.statusLine?.command === "string" ? settings.statusLine.command : "";
 }
 
-function commandOf(settings: ClaudeSettings | null): string {
-	return typeof settings?.statusLine?.command === "string" ? settings.statusLine.command : "";
-}
-
-function writeSettings(configDir: string, settings: ClaudeSettings): string {
-	const file = Gio.File.new_for_path(settingsPath(configDir));
+function writeSettings(configDir: string, name: string, settings: ClaudeSettings): string {
+	const path = GLib.build_filenamev([configDir, name]);
+	const file = Gio.File.new_for_path(path);
 
 	// Keep one pristine copy of whatever was there before the first edit.
-	const backup = Gio.File.new_for_path(settingsPath(configDir) + BACKUP_SUFFIX);
+	const backup = Gio.File.new_for_path(path + BACKUP_SUFFIX);
 	if (file.query_exists(null) && !backup.query_exists(null)) {
 		try {
 			file.copy(backup, Gio.FileCopyFlags.NONE, null, null);

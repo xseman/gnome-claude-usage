@@ -6,15 +6,11 @@ import type Gio from "gi://Gio";
  * GSettings has no dictionary type, so the list lives as an array of JSON
  * strings. Both the indicator and the preferences dialog go through here so the
  * shape stays in one place.
- *
- * A profile is identified by its config directory; `chain` holds the status
- * line command it had before the wrapper was installed, so uninstalling puts
- * back exactly what was there.
  */
 
 /** A Claude Code config directory the panel should report on. */
 export interface Profile {
-	name: string;
+	/** Identifies the profile; the value CLAUDE_CONFIG_DIR would be set to. */
 	dir: string;
 	enabled: boolean;
 	/** Status line command the profile had before the wrapper was installed. */
@@ -38,9 +34,6 @@ export function readProfiles(settings: Gio.Settings): Profile[] {
 		}
 
 		profiles.push({
-			name: typeof parsed.name === "string" && parsed.name !== ""
-				? parsed.name
-				: basename(parsed.dir),
 			dir: parsed.dir,
 			enabled: parsed.enabled !== false,
 			chain: typeof parsed.chain === "string" ? parsed.chain : "",
@@ -60,11 +53,14 @@ export function writeProfiles(settings: Gio.Settings, profiles: Profile[]): void
 	);
 }
 
-/** Default display name for a config directory. */
-export function basename(dir: string): string {
+/**
+ * Display name for a profile: the config directory's own name, without the
+ * leading dot that hides it. `~/.claude-work` reads as `claude-work`.
+ */
+export function profileName(dir: string): string {
 	const parts = dir.split("/").filter((part) => {
 		return part !== "";
 	});
 
-	return parts.at(-1) ?? dir;
+	return (parts.at(-1) ?? dir).replace(/^\./, "");
 }

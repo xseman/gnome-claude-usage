@@ -1,22 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-	<enum id="org.gnome.shell.extensions.claude-usage.panel-source">
-		<value nick="highest" value="0"/>
-		<value nick="active" value="1"/>
-		<value nick="profile" value="2"/>
-		<value nick="all" value="3"/>
-	</enum>
-
 	<enum id="org.gnome.shell.extensions.claude-usage.panel-limit">
 		<value nick="five-hour" value="0"/>
 		<value nick="seven-day" value="1"/>
 		<value nick="highest" value="2"/>
-	</enum>
-
-	<enum id="org.gnome.shell.extensions.claude-usage.panel-format">
-		<value nick="icon" value="0"/>
-		<value nick="text" value="1"/>
-		<value nick="both" value="2"/>
 	</enum>
 
 	<schema id="org.gnome.shell.extensions.claude-usage"
@@ -26,38 +13,27 @@
 			<default>[]</default>
 			<summary>Configured profiles</summary>
 			<description>
-				One JSON object per entry with the keys name, dir, enabled and
-				chain. The dir is a Claude Code config directory, the value
+				One JSON object per entry with the keys dir, enabled and chain.
+				The dir is a Claude Code config directory, the value
 				CLAUDE_CONFIG_DIR would be set to, and identifies the profile.
 			</description>
 		</key>
 
-		<key name="panel-source" enum="org.gnome.shell.extensions.claude-usage.panel-source">
+		<key name="panel-source" type="s">
 			<default>"highest"</default>
 			<summary>Which profile the panel shows</summary>
 			<description>
-				highest shows the profile closest to its limit, active shows the
-				most recently updated one, profile pins panel-profile and all
-				shows every enabled profile side by side.
+				"highest" shows the profile closest to its limit, "active" the
+				most recently updated one and "all" every enabled profile side
+				by side. Any other value is the config directory of the single
+				profile to pin.
 			</description>
-		</key>
-
-		<key name="panel-profile" type="s">
-			<default>""</default>
-			<summary>Pinned profile</summary>
-			<description>Config directory pinned when panel-source is profile.</description>
 		</key>
 
 		<key name="panel-limit" enum="org.gnome.shell.extensions.claude-usage.panel-limit">
 			<default>"five-hour"</default>
 			<summary>Which limit the panel shows</summary>
 			<description>The rate limit window rendered in the panel button.</description>
-		</key>
-
-		<key name="panel-format" enum="org.gnome.shell.extensions.claude-usage.panel-format">
-			<default>"both"</default>
-			<summary>Panel button contents</summary>
-			<description>Whether the panel shows the gauge icon, the percentage or both.</description>
 		</key>
 
 		<key name="hide-when-stale" type="b">
@@ -106,15 +82,6 @@
 			<description>
 				How often the rendered countdowns are recomputed. Usage values
 				themselves arrive through a file monitor, not by polling.
-			</description>
-		</key>
-
-		<key name="state-dir" type="s">
-			<default>""</default>
-			<summary>State directory override</summary>
-			<description>
-				Directory the status line wrapper writes to. Empty means
-				$XDG_STATE_HOME/claude-usage.
 			</description>
 		</key>
 	</schema>

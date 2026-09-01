@@ -21,11 +21,16 @@ import {
 	type StatusPayload,
 	windowPercent,
 } from "./format.js";
+import { inspect } from "./installer.js";
 import {
 	type Profile,
+	profileName,
 	readProfiles,
 } from "./profiles.js";
-import { Store } from "./store.js";
+import {
+	stateDir,
+	Store,
+} from "./store.js";
 
 /** Width of a usage bar. Fills are sized against it, so it stays fixed. */
 const BAR_WIDTH = 150;
@@ -40,7 +45,10 @@ interface LimitView extends LimitRow {
 
 interface ProfileView {
 	profile: Profile;
+	name: string;
 	payload: StatusPayload | null;
+	/** Only meaningful without a payload, to tell "never ran" from "no hook". */
+	hookInstalled: boolean;
 	age: number;
 	stale: boolean;
 	peak: number;
@@ -75,7 +83,7 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 
 		this.extension = extension;
 		this.settings = extension.getSettings();
-		this.store = new Store(this.settings.get_string("state-dir"));
+		this.store = new Store(stateDir());
 
 		this.icon = new St.Icon({
 			icon_name: "utilities-system-monitor-symbolic",
@@ -93,11 +101,6 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 		this.add_child(box);
 
 		this.settingsHandler = this.settings.connect("changed", (_settings, key: string) => {
-			if (key === "state-dir") {
-				this.store.destroy();
-				this.store = new Store(this.settings.get_string("state-dir"));
-			}
-
 			if (key === "refresh-seconds") {
 				this.startTimer();
 			}
@@ -196,7 +199,11 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 
 				return {
 					profile: profile,
+					name: profileName(profile.dir),
 					payload: payload,
+					// inspect() reads a file, so only ask when there is a
+					// reason to: a profile that has never reported.
+					hookInstalled: payload !== null || inspect(profile.dir).installedIn !== null,
 					age: age,
 					stale: age > staleAfter,
 					peak: peakPercent(rows),
@@ -214,10 +221,6 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 	}
 
 	private renderPanel(views: ProfileView[]): void {
-		const format = this.settings.get_string("panel-format");
-		this.icon.visible = format !== "text";
-		this.label.visible = format !== "icon";
-
 		const usable = views.filter((view) => {
 			return view.payload !== null;
 		});
@@ -252,6 +255,10 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 		this.label.style_class = `claude-usage-panel-label claude-usage-${level}`;
 	}
 
+	/**
+	 * Which profiles the panel button stands for. The setting holds either a
+	 * strategy or the config directory of one pinned profile.
+	 */
 	private panelViews(usable: ProfileView[]): ProfileView[] {
 		const source = this.settings.get_string("panel-source");
 
@@ -259,18 +266,20 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 			return usable;
 		}
 
-		if (source === "profile") {
-			const pinned = usable.find((view) => {
-				return view.profile.dir === this.settings.get_string("panel-profile");
-			});
-
-			return pinned ? [pinned] : usable.slice(0, 1);
-		}
-
 		if (source === "active") {
 			return [usable.reduce((best, view) => {
 				return view.age < best.age ? view : best;
 			})];
+		}
+
+		if (source !== "highest") {
+			const pinned = usable.find((view) => {
+				return view.profile.dir === source;
+			});
+
+			if (pinned !== undefined) {
+				return [pinned];
+			}
 		}
 
 		return [usable.reduce((best, view) => {
@@ -317,7 +326,7 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 
 			if (!view.stale && rank(level) > rank(previous)) {
 				Main.notify(
-					`Claude usage: ${view.profile.name}`,
+					`Claude usage: ${view.name}`,
 					`${Math.round(view.peak)}% of a rate limit window used.`,
 				);
 			}
@@ -342,7 +351,7 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	const header = row("claude-usage-header");
 	header.add_child(
 		new St.Label({
-			text: model ? `${view.profile.name} · ${model}` : view.profile.name,
+			text: model ? `${view.name} · ${model}` : view.name,
 			style_class: "claude-usage-name",
 			x_expand: true,
 		}),
@@ -381,9 +390,22 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 
 	if (view.payload === null) {
 		items.push(
-			new PopupMenu.PopupMenuItem("Status line hook not installed", { reactive: false }),
+			new PopupMenu.PopupMenuItem(
+				view.hookInstalled
+					? "Waiting for this profile's first session"
+					: "Status line hook not installed",
+				{ reactive: false },
+			),
 		);
 		return items;
+	}
+
+	// Claude Code fetches the limits asynchronously, so the first payloads of a
+	// session carry everything but rate_limits.
+	if (view.rows.length === 0) {
+		items.push(
+			new PopupMenu.PopupMenuItem("No rate limits reported yet", { reactive: false }),
+		);
 	}
 
 	const footer = row("claude-usage-footer");

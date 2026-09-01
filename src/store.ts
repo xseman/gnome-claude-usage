@@ -41,8 +41,8 @@ export class Store {
 	private readonly decoder = new TextDecoder();
 	private readonly dir: Gio.File;
 
-	constructor(stateDir: string) {
-		this.dir = Gio.File.new_for_path(stateDir || defaultStateDir());
+	constructor(dir: string) {
+		this.dir = Gio.File.new_for_path(dir);
 		ensureDirectory(this.dir);
 		this.refresh();
 	}
@@ -145,8 +145,11 @@ export class Store {
 	}
 }
 
-/** Default location the status line wrapper writes to. */
-export function defaultStateDir(): string {
+/**
+ * Where the wrapper writes. Not configurable: the wrapper derives the same path
+ * from XDG_STATE_HOME, and a setting only on this side would desync the two.
+ */
+export function stateDir(): string {
 	return GLib.build_filenamev([GLib.get_user_state_dir(), "claude-usage"]);
 }
 
