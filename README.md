@@ -335,16 +335,24 @@ journalctl -f -o cat /usr/bin/gnome-shell
 
 ## Releasing
 
-`bun run pack` builds `dist/claude-usage@xseman.github.io.shell-extension.zip`,
-the bundle extensions.gnome.org takes. Every module is passed to
-`gnome-extensions pack` explicitly, because on its own it bundles only
-`extension.js`, `prefs.js`, `metadata.json`, `stylesheet.css` and the schema.
+`bun run pack` builds `dist/<uuid>.shell-extension.zip`, the bundle
+extensions.gnome.org takes: every file at the archive root, the schema as XML
+only. It is a plain `zip` rather than `gnome-extensions pack`, which ships in
+the gnome-shell package and would mean installing all of GNOME in CI to produce
+a 20 kB archive.
 
-Releases follow release-please: conventional commits on `master` open a release
-PR, merging it tags a version, bumps `version-name` in `metadata.json` and
-attaches the zip to the GitHub release. extensions.gnome.org has no upload API,
-so the zip is submitted by hand at <https://extensions.gnome.org/upload/>, after
-running their static analyzer:
+Releases follow release-please. Conventional commits on `master` open a release
+PR; merging it tags the version, writes the changelog, bumps `version-name` in
+`metadata.json` and attaches the zip to the GitHub release.
+
+That attached zip is the artifact. extensions.gnome.org has no upload API, so
+the last step is manual and takes about a minute:
+
+1. Download the zip from the release page
+2. Upload it at <https://extensions.gnome.org/upload/> and accept the two terms
+3. Review is by a human and takes days to weeks; the result arrives by e-mail
+
+Before uploading, run their static analyzer:
 
 ```sh
 pip install -U shexli

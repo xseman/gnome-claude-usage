@@ -46,7 +46,7 @@ jobs:
               run: |
                   bun install --frozen-lockfile
                   sudo apt-get update
-                  sudo apt-get install --no-install-recommends -y gnome-shell libglib2.0-bin
+                  sudo apt-get install --no-install-recommends -y libglib2.0-bin
 
             - name: pack
               run: bun run pack
