@@ -1,6 +1,11 @@
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 
+import {
+	HOOK_MARKER,
+	SETTINGS_FILES,
+} from "./configDir.js";
+
 /**
  * Installs the status line wrapper into a Claude Code config directory.
  *
@@ -9,22 +14,6 @@ import GLib from "gi://GLib";
  * wrapper. Whatever status line was configured before is preserved and chained,
  * never dropped.
  */
-
-/**
- * Settings files a config directory can hold, highest precedence first.
- *
- * Claude Code merges several sources and `settings.local.json` outranks
- * `settings.json`. Writing to the lower one while the higher one defines a
- * status line would install a hook that silently never runs, so the wrapper
- * goes into whichever file already owns the status line.
- */
-const SETTINGS_FILES = [
-	"settings.local.json",
-	"settings.json",
-] as const;
-
-/** Substring that identifies a command as ours. */
-const MARKER = "claude-usage-statusline";
 
 /** Suffix of the one-time backup taken before the first edit. */
 const BACKUP_SUFFIX = ".bak-claude-usage";
@@ -96,7 +85,7 @@ export function inspect(configDir: string): HookState {
 		// The first file with a status line is the one Claude Code obeys.
 		owner ??= file;
 
-		if (command.includes(MARKER)) {
+		if (command.includes(HOOK_MARKER)) {
 			installedIn ??= file;
 		} else {
 			foreign ??= { file: file, command: command };
@@ -172,38 +161,6 @@ export function uninstall(configDir: string, chain: string): UninstallResult {
 	const error = writeSettings(configDir, file, settings);
 
 	return { ok: error === "", error: error };
-}
-
-/**
- * Whether the wrapper is installed in any settings file of a profile. The
- * asynchronous counterpart of inspect(), for the shell process, which must not
- * block on a file read.
- */
-export async function hookInstalled(configDir: string): Promise<boolean> {
-	for (const name of SETTINGS_FILES) {
-		const file = Gio.File.new_for_path(GLib.build_filenamev([configDir, name]));
-
-		let text: string;
-		try {
-			const [contents] = await file.load_contents_async(null);
-			text = decoder.decode(contents);
-		} catch {
-			continue;
-		}
-
-		let parsed: ClaudeSettings;
-		try {
-			parsed = JSON.parse(text) as ClaudeSettings;
-		} catch {
-			continue;
-		}
-
-		if (commandOf(parsed).includes(MARKER)) {
-			return true;
-		}
-	}
-
-	return false;
 }
 
 /** Parse one settings file. A missing file reads as an empty object. */

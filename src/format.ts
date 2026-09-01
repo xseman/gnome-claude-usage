@@ -140,6 +140,22 @@ export function severity(percent: number, warning: number, critical: number): Se
 }
 
 /**
+ * Plan label from what Claude Code stores on disk: `max` with tier
+ * `default_claude_max_5x` reads as `Max 5x`, `pro` as `Pro`. Nothing is mapped
+ * by name, so a plan that does not exist yet still shows through.
+ */
+export function tierLabel(subscriptionType: string | null, rateLimitTier: string | null): string {
+	const base = (subscriptionType ?? "")
+		.replace(/^claude[_-]/i, "")
+		.replace(/[_-]+/g, " ")
+		.trim();
+	const named = base === "" ? "" : `${base.charAt(0).toUpperCase()}${base.slice(1)}`;
+	const multiplier = /(\d+)x/.exec(rateLimitTier ?? "");
+
+	return multiplier ? `${named} ${multiplier[1]}x`.trim() : named;
+}
+
+/**
  * Turn `seven_day_opus` into `7 d Opus`, `five_hour` into `5 h`. Model scoped
  * weekly limits are plan specific, so the label is derived rather than listed.
  */

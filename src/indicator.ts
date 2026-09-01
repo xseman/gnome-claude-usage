@@ -10,6 +10,10 @@ import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
 import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
 
 import {
+	hookInstalled,
+	readCredentials,
+} from "./configDir.js";
+import {
 	formatAge,
 	formatCountdown,
 	type LimitRow,
@@ -19,9 +23,9 @@ import {
 	type Severity,
 	severity,
 	type StatusPayload,
+	tierLabel,
 	windowPercent,
 } from "./format.js";
-import { hookInstalled } from "./installer.js";
 import {
 	type Profile,
 	profileName,
@@ -31,6 +35,10 @@ import {
 	stateDir,
 	Store,
 } from "./store.js";
+import {
+	type FetchFailure,
+	UsageClient,
+} from "./usageClient.js";
 
 /** Width of a usage bar. Fills are sized against it, so it stays fixed. */
 const BAR_WIDTH = 150;
@@ -46,6 +54,10 @@ interface LimitView extends LimitRow {
 interface ProfileView {
 	profile: Profile;
 	name: string;
+	/** Plan from .credentials.json, empty when the profile is not signed in. */
+	tier: string;
+	/** Why the last live fetch wrote nothing, when live fetch is on. */
+	fetchFailure: FetchFailure | null;
 	payload: StatusPayload | null;
 	/** Only meaningful without a payload, to tell "never ran" from "no hook". */
 	hookInstalled: boolean;
@@ -71,6 +83,9 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 	private readonly settingsHandler: number;
 	private readonly openHandler: number;
 	private store: Store;
+	private readonly client = new UsageClient();
+	private readonly tiers = new Map<string, string>();
+	private readonly fetches = new Map<string, { at: number; failure: FetchFailure | null; }>();
 	private timeout = 0;
 	private ticking = false;
 	private destroyed = false;
@@ -177,6 +192,7 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 
 		this.ticking = true;
 		try {
+			await this.fetchLive();
 			const changed = await this.store.refresh();
 			const views = await this.collect();
 			if (this.destroyed) {
@@ -220,6 +236,8 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 			return {
 				profile: profile,
 				name: profileName(profile.dir),
+				tier: await this.tierOf(profile.dir),
+				fetchFailure: this.fetches.get(profile.dir)?.failure ?? null,
 				payload: payload,
 				// Reading settings costs a file read, so only ask when there
 				// is a reason to: a profile that has never reported.
@@ -230,6 +248,55 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 				rows: rows,
 			};
 		}));
+	}
+
+	/** Plan label, read once per profile: it only changes on re-login. */
+	private async tierOf(dir: string): Promise<string> {
+		const cached = this.tiers.get(dir);
+		if (cached !== undefined) {
+			return cached;
+		}
+
+		const credentials = await readCredentials(dir);
+		const label = credentials === null
+			? ""
+			: tierLabel(credentials.subscriptionType, credentials.rateLimitTier);
+
+		this.tiers.set(dir, label);
+
+		return label;
+	}
+
+	/**
+	 * With live fetch on, ask the API for every enabled profile whose status
+	 * line data is older than the fetch interval, at most once per interval.
+	 * The result lands in the same state file the wrapper writes, so the
+	 * store sees it on the refresh that follows.
+	 */
+	private async fetchLive(): Promise<void> {
+		if (!this.settings.get_boolean("live-fetch")) {
+			return;
+		}
+
+		const now = GLib.DateTime.new_now_local().to_unix();
+		const interval = this.settings.get_int("fetch-seconds");
+
+		for (const profile of readProfiles(this.settings)) {
+			if (!profile.enabled) {
+				continue;
+			}
+
+			const entry = this.store.get(profile.dir);
+			const fresh = entry !== null && now - entry.updatedAt < interval;
+			const attempted = this.fetches.get(profile.dir);
+			const recently = attempted !== undefined && now - attempted.at < interval;
+			if (fresh || recently) {
+				continue;
+			}
+
+			const failure = await this.client.refresh(profile.dir, stateDir());
+			this.fetches.set(profile.dir, { at: now, failure: failure });
+		}
 	}
 
 	private severityOf(percent: number): Severity {
@@ -367,18 +434,19 @@ export const Indicator = ClaudeUsageIndicator;
 function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	const items: PopupMenu.PopupBaseMenuItem[] = [];
 
-	const model = view.payload?.model?.display_name;
 	const header = row("claude-usage-header");
 	header.add_child(
 		new St.Label({
-			text: model ? `${view.name} · ${model}` : view.name,
+			text: [view.name, view.payload?.model?.display_name, view.tier]
+				.filter((part) => part)
+				.join(" · "),
 			style_class: "claude-usage-name",
 			x_expand: true,
 		}),
 	);
 	header.add_child(
 		new St.Label({
-			text: view.payload === null ? "no data" : formatAge(view.age),
+			text: view.payload === null ? (fetchHint(view.fetchFailure) ?? "no data") : formatAge(view.age),
 			style_class: view.stale ? "claude-usage-age claude-usage-stale" : "claude-usage-age",
 		}),
 	);
@@ -466,6 +534,24 @@ function usageBar(percent: number, level: Severity): St.Widget {
 	);
 
 	return track;
+}
+
+/** What to say instead of "no data" when a live fetch explains the gap. */
+function fetchHint(failure: FetchFailure | null): string | null {
+	switch (failure) {
+		case "expired":
+			return "token expired";
+		case "no-token":
+			return "not signed in";
+		case "rate-limited":
+			return "rate limited";
+		case "network":
+			return "offline";
+		case null:
+			return null;
+		default:
+			return failure;
+	}
 }
 
 function peakOf(view: ProfileView): number {

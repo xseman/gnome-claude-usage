@@ -75,6 +75,33 @@
 			</description>
 		</key>
 
+		<key name="live-fetch" type="b">
+			<default>false</default>
+			<summary>Fetch usage from the API between sessions</summary>
+			<description>
+				Call the endpoint Claude Code's /usage uses, with the token
+				Claude Code stored, whenever the status line data is older than
+				fetch-seconds. The token is never refreshed by the extension.
+			</description>
+		</key>
+
+		<key name="fetch-seconds" type="i">
+			<range min="60" max="3600"/>
+			<default>300</default>
+			<summary>Live fetch interval</summary>
+			<description>Seconds between API calls per profile while live fetch is on.</description>
+		</key>
+
+		<key name="profiles-seeded" type="b">
+			<default>false</default>
+			<summary>Profiles were auto-detected once</summary>
+			<description>
+				Set after the first enable seeds the profile list from the
+				config directories found in the home directory, so a list the
+				user emptied on purpose is not filled again.
+			</description>
+		</key>
+
 		<key name="refresh-seconds" type="i">
 			<range min="5" max="600"/>
 			<default>30</default>

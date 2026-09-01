@@ -13,6 +13,7 @@
 	},
 	"devDependencies": {
 		"@girs/gnome-shell": "50.0.4",
+		"@girs/soup-3.0": "4.1.0",
 		"typescript": "7.0.2"
 	},
 	"license": "GPL-2.0-or-later"

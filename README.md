@@ -20,10 +20,13 @@ line, so this extension stores that payload and puts it in the panel.
 ## Features
 
 - Percentage and reset countdown for every rate limit window Claude Code reports
-- Multiple profiles, one per `CLAUDE_CONFIG_DIR`, each with its own account
+- Multiple profiles, one per `CLAUDE_CONFIG_DIR`, each with its own account,
+  detected from `~/.claude*` on first run
+- Plan shown per profile (`Max 5x`, `Pro`), read from what Claude Code stored
 - Per-profile data age, so a stale number is never shown as a current one
 - Installs and removes its own status line hook, chaining any existing one
-- No network access, no credential reads, no transcript parsing
+- Optional live fetch between sessions, off by default; without it there is no
+  network access at all
 
 ## How it works
 
@@ -74,9 +77,26 @@ The payload arrives only while a session renders its status line, so numbers age
 between sessions. Every profile carries the age of its data and dims once it
 passes the stale threshold.
 
-`/api/oauth/usage` would give the same numbers without a session, but Claude
-Code rotates the OAuth token when it calls it. A second client racing that
-rotation can log you out, so the extension stays away from it.
+### Live fetch, off by default
+
+**Fetch live usage between sessions** in the preferences calls
+`GET https://api.anthropic.com/api/oauth/usage`, the endpoint Claude Code's
+`/usage` uses, with the access token Claude Code stored in
+`.credentials.json`. It runs only for a profile whose status line data is older
+than the fetch interval, and writes the answer into the same state file the
+wrapper writes, so everything downstream stays one code path.
+
+The token is used as found and **never refreshed** by the extension: refreshing
+rotates the refresh token, and a second client doing that races the running
+Claude Code session. An expired token shows as `token expired` in the popup
+until Claude Code renews it, which it does on its next run.
+
+### Plan and profile discovery
+
+`.credentials.json` also carries the subscription (`subscriptionType`,
+`rateLimitTier`), shown in each profile's header as `Max 5x` or `Pro`. On first
+enable, every `~/.claude*` directory holding a login is added as a profile;
+the search button in the preferences repeats that for directories added later.
 
 ## Interface
 
@@ -311,10 +331,11 @@ pkill -f "gjs -m /usr/share/gnome-shell/org.gnome.Shell.Extensions"
 ```
 
 To try a build without logging out, run a nested shell. It picks up the
-installed extension and leaves the session alone:
+installed extension and leaves the session alone. GNOME 50 calls this
+`--devkit`; `--wayland` without `--display-server` does the same:
 
 ```sh
-dbus-run-session -- gnome-shell --wayland
+dbus-run-session -- gnome-shell --devkit
 ```
 
 Headless, for a load check in a script:
@@ -364,9 +385,24 @@ shexli dist/*.shell-extension.zip
 GPL-2.0-or-later, see [LICENSE](LICENSE). GNOME Shell is GPL-2.0-or-later and
 extensions.gnome.org requires compatible terms.
 
-Unofficial: not affiliated with Anthropic. The icon is original artwork.
+Unofficial: not affiliated with Anthropic. The panel icon is Anthropic's Claude
+mark, taken from [claude-status](https://github.com/montanhes/claude-status).
+extensions.gnome.org requires permission for third party logos, so a submission
+there needs either that permission or an original icon.
 
 ## Related
+
+Other GNOME extensions for the same numbers, each with a different data source:
+
+- [claude-status](https://github.com/montanhes/claude-status) runs
+  `claude -p /usage` on a timer; also the source of the icon here
+- [claude-quota](https://github.com/andrearicchi/gnome-shell-extension-claude-quota)
+  polls the OAuth endpoint with the stored token, never refreshing it; the
+  model the live fetch here follows
+- [ClaudeCodeUsage](https://github.com/dvdstelt/ClaudeCodeUsage) polls and
+  refreshes the token itself, shows the plan, projects burn rate; the source of
+  the plan label and profile discovery here
+- [claudeland](https://github.com/FabioSM46/claudeland) adds a desktop card
 
 - <https://code.claude.com/docs/en/statusline>
 - <https://gjs.guide/extensions/>

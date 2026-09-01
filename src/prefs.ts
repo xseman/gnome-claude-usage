@@ -5,6 +5,7 @@ import Gtk from "gi://Gtk";
 
 import { ExtensionPreferences } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
+import { discoverConfigDirs } from "./configDir.js";
 import {
 	type HookState,
 	inspect,
@@ -90,7 +91,30 @@ function profilesPage(ctx: Context, window: Adw.PreferencesWindow): Adw.Preferen
 		chooseDirectory(ctx, window);
 	});
 
-	ctx.group.set_header_suffix(add);
+	const detect = new Gtk.Button({
+		icon_name: "folder-saved-search-symbolic",
+		tooltip_text: "Add every ~/.claude* directory with a Claude Code login",
+		valign: Gtk.Align.CENTER,
+		css_classes: ["flat"],
+	});
+	detect.connect("clicked", () => {
+		void discoverConfigDirs().then((dirs) => {
+			const profiles = readProfiles(ctx.settings);
+			const known = new Set(profiles.map((profile) => profile.dir));
+			for (const dir of dirs) {
+				if (!known.has(dir)) {
+					profiles.push({ dir: dir, enabled: true, chain: "" });
+				}
+			}
+			writeProfiles(ctx.settings, profiles);
+			rebuildProfiles(ctx, window);
+		});
+	});
+
+	const buttons = new Gtk.Box({ spacing: 6 });
+	buttons.append(detect);
+	buttons.append(add);
+	ctx.group.set_header_suffix(buttons);
 	page.add(ctx.group);
 
 	rebuildProfiles(ctx, window);
@@ -301,6 +325,18 @@ function panelPage(ctx: Context): Adw.PreferencesPage {
 	timing.add(spin(ctx, "Refresh interval", "refresh-seconds", {
 		min: 5,
 		max: 600,
+		subtitle: "seconds",
+	}));
+	timing.add(toggle(
+		ctx,
+		"Fetch live usage between sessions",
+		"live-fetch",
+		"Ask the API with the token Claude Code stored whenever status line data "
+			+ "is older than the interval. The token is never refreshed here.",
+	));
+	timing.add(spin(ctx, "Live fetch interval", "fetch-seconds", {
+		min: 60,
+		max: 3600,
 		subtitle: "seconds",
 	}));
 	timing.add(spin(ctx, "Data is stale after", "stale-after-minutes", {

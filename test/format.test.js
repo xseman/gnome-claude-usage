@@ -15,6 +15,7 @@ import {
 	peakPercent,
 	severity,
 	slugify,
+	tierLabel,
 	windowPercent,
 } from "../lib/format.js";
 import {
@@ -44,6 +45,11 @@ check("formatAge days", formatAge(180_000), "2 d ago");
 check("severity normal", severity(43, 70, 90), "normal");
 check("severity warning", severity(70, 70, 90), "warning");
 check("severity critical", severity(91, 70, 90), "critical");
+
+check("tierLabel max with multiplier", tierLabel("max", "default_claude_max_5x"), "Max 5x");
+check("tierLabel pro", tierLabel("pro", "default_claude_pro"), "Pro");
+check("tierLabel strips a claude prefix", tierLabel("claude_team", null), "Team");
+check("tierLabel without a login", tierLabel(null, null), "");
 
 check("limitTitle five hour", limitTitle("five_hour"), "5 h");
 check("limitTitle seven day", limitTitle("seven_day"), "7 d");

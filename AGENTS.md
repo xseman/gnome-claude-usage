@@ -1,7 +1,8 @@
 # Repository Guidelines
 
 - License is GPL-2.0-or-later; extensions.gnome.org rejects anything GPL-2.0 incompatible
-- The icon must stay original artwork, never derived from a vendor's logo
+- The panel icon is Anthropic's mark; an extensions.gnome.org submission needs
+  permission for it or an original replacement
 
 - Keep `README.md` up to date after each change
 - Make sure `bun run typecheck` and `bun run test` pass after significant changes
@@ -22,8 +23,10 @@ Tests run without GNOME Shell. That constrains what may live where:
 
 - `src/format.ts` and `src/profiles.ts` import no runtime module, so pure
   decisions belong there rather than in the indicator
-- `src/store.ts` and `src/installer.ts` may import `Gio` and `GLib` only, never
-  `resource:///org/gnome/shell/*`
+- `src/store.ts`, `src/configDir.ts` and `src/usageClient.ts` may import `Gio`,
+  `GLib` and `Soup` only, never `resource:///org/gnome/shell/*`
+- `src/installer.ts` does synchronous file IO and is loaded by prefs only; the
+  shell must never import it, shexli flags sync IO reachable from extension.js
 - `src/indicator.ts`, `src/extension.ts` and `src/prefs.ts` are the only files
   allowed shell or Adw imports, and are not unit tested
 
@@ -47,6 +50,7 @@ per assertion. Prefer executing the real thing over asserting on a string:
 
 - Everything created in the constructor is undone in `destroy()`: timeouts via
   `GLib.Source.remove`, handlers via `disconnect`
-- No network access and no credential reads from the shell process
+- Network and credential reads happen only in `usageClient.ts`, only when the
+  `live-fetch` setting is on, and the token is never refreshed or written back
 - No synchronous subprocess spawning, the shell blocks on it
 - Never name a member after one a GObject already has, `notify` in particular

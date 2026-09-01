@@ -61,3 +61,37 @@ jobs:
         steps:
             - uses: actions/checkout@v7
             - uses: dprint/check@v2.3
+
+    shexli:
+        name: Shexli
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+
+            - name: install
+              run: |
+                  bun install --frozen-lockfile
+                  sudo apt-get update
+                  sudo apt-get install --no-install-recommends -y libglib2.0-bin
+                  # tree-sitter 0.26 is ABI-incompatible with the grammar shexli
+                  # pins and segfaults on resource:/// imports; stay below it.
+                  pip install -U shexli 'tree-sitter<0.26'
+
+            - name: pack
+              run: bun run pack
+
+            # Warnings are reported but tolerated: EGO-P-007 is inherent, the
+            # status line wrapper is run by Claude Code, not imported.
+            - name: analyze
+              run: |
+                  shexli dist/*.shell-extension.zip || true
+                  shexli --format json dist/*.shell-extension.zip > shexli.json || true
+                  errors=$(python3 -c "import json;print(json.load(open('shexli.json'))['summary'].get('severity_counts', {}).get('error', 0))")
+                  echo "errors: $errors"
+                  [ "$errors" = "0" ]
