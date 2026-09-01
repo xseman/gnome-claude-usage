@@ -23,7 +23,9 @@ jobs:
               with:
                   manifest-file: .github/.release-manifest.json
                   config-file: .github/.release-config.json
-                  token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+                  # A PAT lets the release PR trigger the quality workflow;
+                  # GITHUB_TOKEN works but its PRs do not start other runs.
+                  token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
     # extensions.gnome.org has no upload API, so the zip is attached to the
     # GitHub release and submitted by hand at https://extensions.gnome.org/upload/
