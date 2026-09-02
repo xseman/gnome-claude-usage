@@ -73,9 +73,9 @@ jobs:
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
-            - uses: actions/setup-python@v6
+            - uses: actions/setup-python@v7
               with:
-                  python-version: "3.12"
+                  python-version: "3.14"
 
             - name: install
               run: |
