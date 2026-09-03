@@ -521,14 +521,18 @@ function row(styleClass: string): PopupMenu.PopupBaseMenuItem {
 }
 
 /**
- * A fixed width track with an explicitly sized fill. St resolves widths from
- * CSS, so the fill is aligned to the start of a bin layout and given its width
- * in pixels; colours stay in the stylesheet.
+ * A fixed width track with an explicitly sized fill, packed from the left.
+ *
+ * The track is a horizontal box rather than a bin: a bin hands its child the
+ * whole allocation and then positions the child's natural size inside it,
+ * which put the fill in the middle of the track. A box lays children out from
+ * the start, so a fill with a CSS width of N pixels is exactly the first N
+ * pixels of the track. Colours stay in the stylesheet.
  */
 function usageBar(percent: number, level: Severity): St.Widget {
-	const track = new St.Widget({
+	const track = new St.BoxLayout({
 		style_class: "claude-usage-bar",
-		layout_manager: new Clutter.BinLayout(),
+		orientation: Clutter.Orientation.HORIZONTAL,
 		y_align: Clutter.ActorAlign.CENTER,
 	});
 
@@ -538,8 +542,8 @@ function usageBar(percent: number, level: Severity): St.Widget {
 		new St.Widget({
 			style_class: `claude-usage-bar-fill claude-usage-${level}`,
 			style: `width: ${Math.round(BAR_WIDTH * filled / 100)}px;`,
-			x_align: Clutter.ActorAlign.START,
-			y_align: Clutter.ActorAlign.FILL,
+			x_expand: false,
+			y_expand: true,
 		}),
 	);
 
