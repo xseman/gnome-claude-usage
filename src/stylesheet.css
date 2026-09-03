@@ -5,11 +5,11 @@
 }
 
 .claude-usage-panel-label.claude-usage-warning {
-	color: #f5c211;
+	color: #ff7800;
 }
 
 .claude-usage-panel-label.claude-usage-critical {
-	color: #ff7b63;
+	color: #ed333b;
 }
 
 /* Profile header */
@@ -28,7 +28,7 @@
 }
 
 .claude-usage-age.claude-usage-stale {
-	color: #f5c211;
+	color: #ff7800;
 }
 
 /* Limit rows */
@@ -62,11 +62,11 @@
 }
 
 .claude-usage-row-percent.claude-usage-warning {
-	color: #f5c211;
+	color: #ff7800;
 }
 
 .claude-usage-row-percent.claude-usage-critical {
-	color: #ff7b63;
+	color: #ed333b;
 }
 
 .claude-usage-row-countdown {
@@ -90,9 +90,9 @@
 }
 
 .claude-usage-bar-fill.claude-usage-warning {
-	background-color: #f5c211;
+	background-color: #ff7800;
 }
 
 .claude-usage-bar-fill.claude-usage-critical {
-	background-color: #ff7b63;
+	background-color: #ed333b;
 }
