@@ -1,10 +1,14 @@
 <h1 align="center">
-	gnome-claude-usage
+	Claude Limits
 </h1>
 
 <p align="center">
 	Claude Code rate limit usage in the GNOME top panel, with one entry per
 	<code>CLAUDE_CONFIG_DIR</code> profile.
+</p>
+
+<p align="center">
+	<img src="docs/screenshot.png" width="560" alt="Panel button and popup with the session and weekly limits of two profiles">
 </p>
 
 ## Why
@@ -213,14 +217,14 @@ bun run build
 
 `bun run build` compiles `src/*.ts` and assembles `lib/` into a complete
 extension. `install.sh` copies that to
-`~/.local/share/gnome-shell/extensions/claude-usage@xseman.github.io` (override
+`~/.local/share/gnome-shell/extensions/claude-limits@xseman.github.io` (override
 with `EXT_DIR=...`). It never edits a Claude Code config.
 
 Wayland cannot reload the shell in place, so log out and back in, then:
 
 ```sh
-gnome-extensions enable claude-usage@xseman.github.io
-gnome-extensions prefs claude-usage@xseman.github.io
+gnome-extensions enable claude-limits@xseman.github.io
+gnome-extensions prefs claude-limits@xseman.github.io
 ```
 
 ## Configuration
@@ -243,7 +247,7 @@ kept as `CLAUDE_USAGE_CHAIN`, the original file is copied to
 {
 	"statusLine": {
 		"type": "command",
-		"command": "CLAUDE_USAGE_DIR='/home/me/.claude' CLAUDE_USAGE_CHAIN='~/.claude/status-line.sh' gjs -m '/home/me/.local/share/gnome-shell/extensions/claude-usage@xseman.github.io/bin/claude-usage-statusline.js'"
+		"command": "CLAUDE_USAGE_DIR='/home/me/.claude' CLAUDE_USAGE_CHAIN='~/.claude/status-line.sh' gjs -m '/home/me/.local/share/gnome-shell/extensions/claude-limits@xseman.github.io/bin/claude-usage-statusline.js'"
 	}
 }
 ```

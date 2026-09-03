@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-	<enum id="org.gnome.shell.extensions.claude-usage.panel-limit">
+	<enum id="org.gnome.shell.extensions.claude-limits.panel-limit">
 		<value nick="five-hour" value="0"/>
 		<value nick="seven-day" value="1"/>
 		<value nick="highest" value="2"/>
 	</enum>
 
-	<schema id="org.gnome.shell.extensions.claude-usage"
-		path="/org/gnome/shell/extensions/claude-usage/">
+	<schema id="org.gnome.shell.extensions.claude-limits"
+		path="/org/gnome/shell/extensions/claude-limits/">
 
 		<key name="profiles" type="as">
 			<default>[]</default>
@@ -30,7 +30,7 @@
 			</description>
 		</key>
 
-		<key name="panel-limit" enum="org.gnome.shell.extensions.claude-usage.panel-limit">
+		<key name="panel-limit" enum="org.gnome.shell.extensions.claude-limits.panel-limit">
 			<default>"five-hour"</default>
 			<summary>Which limit the panel shows</summary>
 			<description>The rate limit window rendered in the panel button.</description>

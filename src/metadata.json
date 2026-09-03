@@ -1,6 +1,6 @@
 {
-	"uuid": "claude-usage@xseman.github.io",
-	"name": "Claude Usage",
+	"uuid": "claude-limits@xseman.github.io",
+	"name": "Claude Limits",
 	"description": "Unofficial. Shows Claude Code rate limit usage in the top panel, one entry per CLAUDE_CONFIG_DIR profile. Reads only the status line payloads it asks Claude Code to write; the preferences can edit the statusLine key of a profile's settings.json to install that hook, backing the file up first.",
 	"shell-version": [
 		"48",
@@ -8,6 +8,6 @@
 		"50"
 	],
 	"url": "https://github.com/xseman/gnome-claude-usage",
-	"settings-schema": "org.gnome.shell.extensions.claude-usage",
+	"settings-schema": "org.gnome.shell.extensions.claude-limits",
 	"version-name": "0.1.0"
 }

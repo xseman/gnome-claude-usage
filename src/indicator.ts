@@ -96,7 +96,7 @@ class ClaudeUsageIndicator extends PanelMenu.Button {
 	 * Older extensions still override `_init` directly; this does not need to.
 	 */
 	constructor(extension: Extension) {
-		super(0.5, "Claude Usage");
+		super(0.5, "Claude Limits");
 
 		this.extension = extension;
 		this.settings = extension.getSettings();

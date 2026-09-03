@@ -1,4 +1,4 @@
-// Claude Code statusLine wrapper for the "Claude Usage" GNOME Shell extension.
+// Claude Code statusLine wrapper for the "Claude Limits" GNOME Shell extension.
 //
 // Claude Code pipes a JSON status payload to the configured statusLine command
 // on every render. That payload is the only local source of subscription rate
