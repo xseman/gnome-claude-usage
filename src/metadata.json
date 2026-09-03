@@ -9,5 +9,5 @@
 	],
 	"url": "https://github.com/xseman/gnome-claude-usage",
 	"settings-schema": "org.gnome.shell.extensions.claude-limits",
-	"version-name": "0.0.1"
+	"version-name": "0.0.2"
 }
