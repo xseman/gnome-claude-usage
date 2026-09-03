@@ -22,6 +22,8 @@ export interface RateLimit {
 export interface LimitRow extends Measured {
 	title: string;
 	resetsAt: number | null;
+	/** Everything but the five hour session window is a weekly limit. */
+	weekly: boolean;
 }
 
 /** The part of a limit row peakPercent and windowPercent need. */
@@ -41,6 +43,9 @@ const DAY = 24 * HOUR;
 
 /** Epoch values above this many seconds are milliseconds, not seconds. */
 const MILLISECOND_EPOCH_CUTOFF = 100_000_000_000;
+
+/** Keys that name a window a person can read. */
+const KNOWN_WINDOW = /^(five_hour|seven_day|seven_day_[a-z0-9_]+|weekly_[a-z0-9_]+)$/;
 
 /** Order the known rate limit windows are rendered in. */
 const LIMIT_ORDER = [
@@ -156,24 +161,27 @@ export function tierLabel(subscriptionType: string | null, rateLimitTier: string
 }
 
 /**
- * Turn `seven_day_opus` into `7 d Opus`, `five_hour` into `5 h`. Model scoped
- * weekly limits are plan specific, so the label is derived rather than listed.
+ * Row titles as Claude Code's own /usage screen names them: the five hour
+ * window is "Current session", the weekly all-models window "All models", and
+ * a model scoped window is just the model. Keys are Claude Code's, so an
+ * unknown one is title-cased rather than dropped: `nimbus_quill` reads as
+ * "Nimbus Quill" until a display name is known.
  */
 export function limitTitle(key: string): string {
 	if (key === "five_hour") {
-		return "5 h";
+		return "Current session";
 	}
 
 	if (key === "seven_day") {
-		return "7 d";
+		return "All models";
 	}
 
-	if (key.startsWith("seven_day_")) {
-		const model = key.slice("seven_day_".length).replace(/_/g, " ");
-		return `7 d ${model.charAt(0).toUpperCase()}${model.slice(1)}`;
-	}
-
-	return key.replace(/_/g, " ");
+	return key
+		.replace(/^(seven_day|weekly)_/, "")
+		.split(/[_-]+/)
+		.filter((word) => word !== "")
+		.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+		.join(" ");
 }
 
 /**
@@ -190,6 +198,14 @@ export function limitRows(payload: StatusPayload | null): LimitRow[] {
 	const rows: LimitRow[] = [];
 
 	for (const [key, value] of Object.entries(limits)) {
+		// Claude Code also puts spend, extra usage and opaque model codenames
+		// such as `nimbus_quill` in here. Only windows with a meaning the user
+		// can read are rows: the session, the weekly total and model scoped
+		// weekly windows that carry a model name.
+		if (!KNOWN_WINDOW.test(key)) {
+			continue;
+		}
+
 		const percent = percentOf(value);
 		if (!Number.isFinite(percent)) {
 			continue;
@@ -200,6 +216,7 @@ export function limitRows(payload: StatusPayload | null): LimitRow[] {
 			title: limitTitle(key),
 			percent: percent,
 			resetsAt: parseResetsAt((value as RateLimit).resets_at),
+			weekly: key !== "five_hour",
 		});
 	}
 

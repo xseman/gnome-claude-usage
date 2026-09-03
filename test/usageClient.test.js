@@ -20,14 +20,15 @@ const [, bytes] = Gio.File.new_for_path(`${here}/fixtures/usage.json`).load_cont
 const json = JSON.parse(new TextDecoder().decode(bytes));
 
 const payload = payloadFromUsage(json);
-check("keeps the window objects", Object.keys(payload.rate_limits).sort(), ["five_hour", "seven_day"]);
+check("keeps the window objects and names the scoped one", Object.keys(payload.rate_limits).sort(), ["five_hour", "seven_day", "weekly_fable"]);
 check("drops the limits array", "limits" in payload.rate_limits, false);
 check("drops null windows", "seven_day_opus" in payload.rate_limits, false);
 
 const rows = limitRows(payload);
-check("rows come out in the usual order", rows.map((row) => row.key), ["five_hour", "seven_day"]);
+check("rows come out in the usual order", rows.map((row) => row.key), ["five_hour", "seven_day", "weekly_fable"]);
 check("utilization becomes the percentage", rows[0].percent, 15);
 check("an ISO resets_at becomes epoch seconds", rows[0].resetsAt, 1_783_526_400);
-check("titles match the status line ones", rows.map((row) => row.title), ["5 h", "7 d"]);
+check("titles read like the /usage screen", rows.map((row) => row.title), ["Current session", "All models", "Fable"]);
+check("the scoped window carries its percent", rows[2].percent, 26);
 
 report();

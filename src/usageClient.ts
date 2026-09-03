@@ -31,7 +31,7 @@ Gio._promisify(Soup.Session.prototype, "send_and_read_async");
  * Shape the endpoint's JSON like a status line payload, so the store, the
  * rows and the panel need no second code path. The endpoint reports the same
  * windows under the same keys with `utilization` and an ISO `resets_at`, both
- * of which the row parser already accepts. Its `limits` array is dropped.
+ * of which the row parser already accepts.
  */
 export function payloadFromUsage(json: Record<string, unknown>): StatusPayload {
 	const limits: Record<string, unknown> = {};
@@ -40,6 +40,27 @@ export function payloadFromUsage(json: Record<string, unknown>): StatusPayload {
 		if (key !== "limits" && value !== null && typeof value === "object") {
 			limits[key] = value;
 		}
+	}
+
+	// Model scoped weekly windows (Fable, Opus, ...) are only reported in the
+	// limits array, under the model's display name.
+	const entries = Array.isArray(json["limits"]) ? json["limits"] as unknown[] : [];
+	for (const entry of entries) {
+		const limit = entry as {
+			kind?: unknown;
+			percent?: unknown;
+			resets_at?: unknown;
+			scope?: { model?: { display_name?: unknown; }; } | null;
+		};
+		const name = limit.scope?.model?.display_name;
+		if (limit.kind !== "weekly_scoped" || typeof name !== "string" || typeof limit.percent !== "number") {
+			continue;
+		}
+
+		limits[`weekly_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`] = {
+			utilization: limit.percent,
+			resets_at: limit.resets_at,
+		};
 	}
 
 	return { rate_limits: limits };

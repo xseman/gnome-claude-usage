@@ -51,9 +51,10 @@ check("tierLabel pro", tierLabel("pro", "default_claude_pro"), "Pro");
 check("tierLabel strips a claude prefix", tierLabel("claude_team", null), "Team");
 check("tierLabel without a login", tierLabel(null, null), "");
 
-check("limitTitle five hour", limitTitle("five_hour"), "5 h");
-check("limitTitle seven day", limitTitle("seven_day"), "7 d");
-check("limitTitle model scoped", limitTitle("seven_day_opus"), "7 d Opus");
+check("limitTitle five hour", limitTitle("five_hour"), "Current session");
+check("limitTitle seven day", limitTitle("seven_day"), "All models");
+check("limitTitle model scoped", limitTitle("seven_day_opus"), "Opus");
+check("limitTitle live-fetch model", limitTitle("weekly_fable"), "Fable");
 
 const payload = {
 	rate_limits: {
@@ -61,6 +62,8 @@ const payload = {
 		five_hour: { used_percentage: 43.2, resets_at: 1_787_800_000 },
 		seven_day: { utilization: 68, resets_at: 1_787_842_120 },
 		rate_limits_available: true,
+		nimbus_quill: { utilization: 0, resets_at: null },
+		spend: { percent: 0, severity: "normal" },
 	},
 };
 
@@ -69,7 +72,8 @@ check("limitRows orders known windows first", limitRows(payload).map((row) => ro
 	"seven_day",
 	"seven_day_opus",
 ]);
-check("limitRows drops non limit keys", limitRows(payload).length, 3);
+check("limitRows drops flags, spend and opaque codenames", limitRows(payload).length, 3);
+check("limitRows marks weekly windows", limitRows(payload).map((row) => row.weekly), [false, true, true]);
 check("limitRows falls back to utilization", limitRows(payload)[1].percent, 68);
 check("peakPercent", peakPercent(limitRows(payload)), 68);
 check("windowPercent five hour", windowPercent(limitRows(payload), "five-hour"), 43.2);

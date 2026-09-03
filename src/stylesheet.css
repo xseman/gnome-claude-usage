@@ -44,11 +44,20 @@
 }
 
 .claude-usage-row-title {
-	min-width: 60px;
+	min-width: 130px;
+}
+
+.claude-usage-group {
+	padding-top: 10px;
+	padding-bottom: 0;
+}
+
+.claude-usage-group-label {
+	font-weight: bold;
 }
 
 .claude-usage-row-percent {
-	min-width: 44px;
+	min-width: 76px;
 	text-align: right;
 }
 

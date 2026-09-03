@@ -452,30 +452,34 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	);
 	items.push(header);
 
+	let weeklyHeader = false;
 	view.rows.forEach((limit, index) => {
+		// The /usage screen groups the weekly windows under one heading.
+		if (limit.weekly && !weeklyHeader) {
+			weeklyHeader = true;
+			const heading = row("claude-usage-group");
+			heading.add_child(
+				new St.Label({ text: "Weekly limits", style_class: "claude-usage-group-label" }),
+			);
+			items.push(heading);
+		}
+
 		// Menu items are flat siblings, so the last row of a section cannot be
 		// found with :last-child. It carries the section's bottom padding.
 		const last = index === view.rows.length - 1;
 		const item = row(last ? "claude-usage-row claude-usage-row-last" : "claude-usage-row");
-		item.add_child(
-			new St.Label({
-				text: limit.title,
-				style_class: "claude-usage-row-title",
-			}),
-		);
+
+		// The title column has a fixed width so the bars line up whatever the
+		// title says; the countdown sits next to the percentage.
+		item.add_child(new St.Label({ text: limit.title, style_class: "claude-usage-row-title" }));
 		item.add_child(usageBar(limit.percent, limit.level));
 		item.add_child(
 			new St.Label({
-				text: `${Math.round(limit.percent)}%`,
+				text: `${Math.round(limit.percent)}% used`,
 				style_class: `claude-usage-row-percent claude-usage-${limit.level}`,
 			}),
 		);
-		item.add_child(
-			new St.Label({
-				text: limit.countdown,
-				style_class: "claude-usage-row-countdown",
-			}),
-		);
+		item.add_child(new St.Label({ text: limit.countdown, style_class: "claude-usage-row-countdown" }));
 		items.push(item);
 	});
 
@@ -502,9 +506,15 @@ function sectionItems(view: ProfileView): PopupMenu.PopupBaseMenuItem[] {
 	return items;
 }
 
+/**
+ * A display-only menu item. It stays reactive on purpose: a non-reactive item
+ * gets the theme's :insensitive styling, which dims every label in it to grey.
+ * Hover and activation are what is actually unwanted, so those are off.
+ */
 function row(styleClass: string): PopupMenu.PopupBaseMenuItem {
 	return new PopupMenu.PopupBaseMenuItem({
-		reactive: false,
+		activate: false,
+		hover: false,
 		can_focus: false,
 		style_class: styleClass,
 	});
