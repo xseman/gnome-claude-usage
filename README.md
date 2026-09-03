@@ -150,7 +150,7 @@ the search button in the preferences repeats that for directories added later.
 **Preferences, Profiles**
 
 ```
-╭─ Claude Usage ───────────────────────────────────────── - □ x ─╮
+╭─ Claude Limits ──────────────────────────────────────── - □ x ─╮
 │                 [ Profiles ]      Panel                        │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
@@ -174,7 +174,7 @@ the search button in the preferences repeats that for directories added later.
 **Preferences, Panel**
 
 ```
-╭─ Claude Usage ───────────────────────────────────────── - □ x ─╮
+╭─ Claude Limits ──────────────────────────────────────── - □ x ─╮
 │                  Profiles     [ Panel ]                        │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
