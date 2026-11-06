@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.2](https://github.com/xseman/gnome-claude-usage/compare/v0.0.1...v0.0.2) (2026-11-06)
+
+
+### Documentation
+
+* rename CLAUDE.md to AGENTS.md ([7a846a0](https://github.com/xseman/gnome-claude-usage/commit/7a846a06db13d51458f2f9e8428fdf2056d41638))
+
+
+### Maintenance
+
+* update colors usage warning/critical ([a0b9bda](https://github.com/xseman/gnome-claude-usage/commit/a0b9bda3e3b3feb3cfd688d7de6d765fb046d2be))
+
 ## 0.0.1 (2026-09-03)
 
 
