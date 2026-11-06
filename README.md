@@ -110,7 +110,7 @@ window and the wrapper needs nothing. Everything else needs a logout: GNOME
 Shell imports `extension.js` once per session and caches it.
 
 Sources are TypeScript in `src/`, tests run against the built `lib/` without
-GNOME Shell, which constrains what may import what. See [CLAUDE.md](CLAUDE.md).
+GNOME Shell, which constrains what may import what. See [AGENTS.md](AGENTS.md).
 
 ## Releasing
 
